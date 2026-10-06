@@ -27,12 +27,13 @@ from .const_integration import (
     CONF_HOURS_BACKWARD_TO_GET,
     CONF_HOURS_FORWARD_TO_GET,
     CONF_MAX_RESULTS,
-    CONF_SENSITIVITY_EXCLUDE,
     CONF_TRACK,
     CONF_TRACK_NEW_CALENDAR,
     CONF_UPDATE_INTERVAL,
     DEFAULT_DAYS_BACKWARD,
     DEFAULT_DAYS_FORWARD,
+    DEFAULT_HOURS_BACKWARD_TO_GET,
+    DEFAULT_HOURS_FORWARD_TO_GET,
     DEFAULT_UPDATE_INTERVAL,
     YAML_CALENDARS_FILENAME,
 )
@@ -78,7 +79,8 @@ def integration_validate_schema(user_input):  # pylint: disable=unused-argument
 
 async def async_integration_imports(hass: HomeAssistant, import_data):
     """Do the integration  level import tasks."""
-    calendars = import_data["calendars"]
+    # The legacy integration leaves calendars out when it has no calendars yaml
+    calendars = import_data.get("calendars", {})
     path = YAML_CALENDARS_FILENAME.format(
         f"_{import_data['data'].get(CONF_ENTITY_NAME)}"
     )
@@ -115,6 +117,8 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
             read_calendar_yaml_file,
             self._yaml_filepath,
         )
+        if not self._calendars:
+            return self.async_abort(reason="no_calendars")
 
         for calendar in self._calendars:
             for entity in calendar.get(CONF_ENTITIES):
@@ -206,9 +210,6 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
                             entity, user_input, CONF_HOURS_BACKWARD_TO_GET
                         )
                         add_attribute_to_item(entity, user_input, CONF_MAX_RESULTS)
-                        add_attribute_to_item(
-                            entity, user_input, CONF_SENSITIVITY_EXCLUDE
-                        )
                         return await self.async_step_calendar_config()
 
         if self._calendar_no == len(self._calendar_list_selected):
@@ -230,11 +231,15 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
                     ): cv.string,
                     vol.Required(
                         CONF_HOURS_FORWARD_TO_GET,
-                        default=calendar_item[CONF_HOURS_FORWARD_TO_GET],
+                        default=calendar_item.get(
+                            CONF_HOURS_FORWARD_TO_GET, DEFAULT_HOURS_FORWARD_TO_GET
+                        ),
                     ): int,
                     vol.Required(
                         CONF_HOURS_BACKWARD_TO_GET,
-                        default=calendar_item[CONF_HOURS_BACKWARD_TO_GET],
+                        default=calendar_item.get(
+                            CONF_HOURS_BACKWARD_TO_GET, DEFAULT_HOURS_BACKWARD_TO_GET
+                        ),
                     ): int,
                     vol.Optional(
                         CONF_MAX_RESULTS,
@@ -266,5 +271,10 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
             if calendar not in self._calendar_list_selected:
                 await async_delete_calendar(self.hass, self.config_entry, calendar)
         update = self.async_create_entry(title="", data=user_input)
-        await self.hass.config_entries.async_reload(self._config_entry_id)
+        if (
+            user_input == dict(self.config_entry.options)
+            or self.config_entry.state is not config_entries.ConfigEntryState.LOADED
+        ):
+            # The update listener only reloads a loaded entry whose options changed
+            self.hass.config_entries.async_schedule_reload(self._config_entry_id)
         return update
