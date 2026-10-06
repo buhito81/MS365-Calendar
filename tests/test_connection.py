@@ -205,8 +205,9 @@ def _load_token_backend(tmp_path):
 
 
 def _new_refresh_token(backend):
-    """Act as a refresh does, where Entra ID hands out a new refresh token."""
+    """Act as O365's refresh does, with Entra ID handing out a new refresh token."""
     backend.get_refresh_token()["secret"] = "newrefreshtoken"
+    backend.save_token(force=True)
     return True
 
 
