@@ -22,6 +22,7 @@ from homeassistant.util import dt as dt_util
 from O365.calendar import Event  # pylint: disable=no-name-in-module)
 
 from ..const import CONF_ENTITY_NAME, TOKEN_FILE_EXPIRED
+from ..helpers.utils import token_refresh_refused, token_refresh_unavailable
 from .const_integration import (
     CONF_ADVANCED_OPTIONS,
     CONF_DAYS_BACKWARD,
@@ -33,8 +34,6 @@ from .const_integration import (
     DEFAULT_DAYS_FORWARD,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
-    TOKEN_FILE_LOCKED,
-    TOKEN_REFRESH_FAILED,
 )
 from .sync.sync import MS365CalendarEventSyncManager
 from .sync.timeline import MS365Timeline
@@ -263,11 +262,8 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
 
     def _async_token_error(self, err: Exception) -> bool:
         """Check for a failed token refresh, and raise the repair issue if needed."""
-        if not str(err).startswith(TOKEN_REFRESH_FAILED):
-            # The login service failed, or another refresh kept the token file locked
-            return isinstance(err, MsalServiceError) or str(err).startswith(
-                TOKEN_FILE_LOCKED
-            )
+        if not token_refresh_refused(err):
+            return token_refresh_unavailable(err)
         ir.async_create_issue(
             self.hass,
             DOMAIN,

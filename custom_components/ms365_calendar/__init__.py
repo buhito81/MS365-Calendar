@@ -28,7 +28,9 @@ from .const import (
     TOKEN_EXPIRED,
     TOKEN_FILE_EXPIRED,
     TOKEN_FILE_MISSING,
+    TOKEN_REFRESH_SECRET,
 )
+from .helpers.utils import token_refresh_refused, token_refresh_unavailable
 from .integration import setup_integration
 from .integration.const_integration import DOMAIN, PLATFORMS
 from .integration.permissions_integration import Permissions
@@ -167,14 +169,16 @@ async def _async_check_token(hass: HomeAssistant, account, entity_name):
             _LOGGER.warning(TOKEN_ERROR, entity_name, err.description)
         return False
     except RuntimeError as err:
-        if "Refresh token operation failed: invalid_grant" in str(err):
-            _LOGGER.warning(TOKEN_EXPIRED, entity_name)
-            return False
         # O365 2.x refreshes through MSAL, which reports an expired secret this way
-        if "Refresh token operation failed: invalid_client" in str(err):
+        if str(err).startswith(TOKEN_REFRESH_SECRET):
             _LOGGER.warning(SECRET_EXPIRED, entity_name)
             return False
-        raise
+        if token_refresh_refused(err):
+            _LOGGER.warning(TOKEN_EXPIRED, entity_name)
+            return False
+        if not token_refresh_unavailable(err):
+            raise
+        raise _not_ready(err) from err
     except (MsalServiceError, RequestConnectionError, RetryError, Timeout) as err:
         raise _not_ready(err) from err
 

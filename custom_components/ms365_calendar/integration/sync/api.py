@@ -20,12 +20,12 @@ from O365.utils.query import (  # pylint: disable=no-name-in-module, import-erro
 )
 
 from ...classes.config_entry import MS365ConfigEntry
+from ...helpers.utils import token_refresh_refused, token_refresh_unavailable
 from ..const_integration import (
     CONF_TRACK_NEW_CALENDAR,
     CONST_GROUP,
     DOMAIN,
     ITEMS,
-    TOKEN_FILE_LOCKED,
     EventResponse,
 )
 from ..filemgmt_integration import (
@@ -225,10 +225,14 @@ class MS365CalendarService:
             RuntimeError,
             Timeout,
         ) as err:
-            # A token file locked by another refresh can be tried again later
-            if isinstance(err, RuntimeError) and not str(err).startswith(
-                TOKEN_FILE_LOCKED
-            ):
+            if token_refresh_refused(err):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="token_refresh_failed",
+                    translation_placeholders={"error": str(err)},
+                ) from err
+            # A token that cannot be refreshed for now can be tried again later
+            if isinstance(err, RuntimeError) and not token_refresh_unavailable(err):
                 raise
             raise HomeAssistantError(
                 translation_domain=DOMAIN,

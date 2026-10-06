@@ -106,12 +106,4 @@ PERM_CALENDARS_READWRITE = "Calendars.ReadWrite"
 PERM_GROUP_READ_ALL = "Group.Read.All"
 PERM_GROUP_READWRITE_ALL = "Group.ReadWrite.All"
 
-# O365 errors for a token that can no longer be refreshed
-TOKEN_REFRESH_FAILED = (
-    "Refresh token operation failed: invalid_grant",
-    "Refresh token operation failed: invalid_client",
-)
-# The token file stayed locked by another refresh, so try again later
-TOKEN_FILE_LOCKED = "Could not access locked token file"
-
 YAML_CALENDARS_FILENAME = "ms365_calendars{0}.yaml"

@@ -25,9 +25,11 @@ from custom_components.ms365_calendar.classes.api import (
 from .const import ENTITY_NAME, TOKEN_LOCATION
 from .helpers.mock_config_entry import MS365MockConfigEntry
 from .helpers.refresh import (
+    REFRESH_UNAVAILABLE,
     expire_access_token,
     mock_refresh_failure,
     read_token_file,
+    refresh_unavailable,
     set_access_token,
 )
 from .integration.const_integration import DOMAIN, URL
@@ -61,27 +63,59 @@ async def test_setup_retry_when_unreachable(
     assert not issue_registry.issues
 
 
-async def test_setup_retry_when_login_unavailable(
+@pytest.mark.parametrize(("cause", "error"), REFRESH_UNAVAILABLE)
+async def test_setup_retry_when_refresh_unavailable(
     tmp_path,
     hass: HomeAssistant,
     requests_mock: Mocker,
     base_token,
     base_config_entry: MS365MockConfigEntry,
     issue_registry: ir.IssueRegistry,
+    cause,
+    error,
 ) -> None:
-    """Test setup is retried when the login service fails to refresh the token."""
+    """Test setup is retried when the token cannot be refreshed for now."""
     MS365MOCKS.standard_mocks(requests_mock)
     expire_access_token(tmp_path)
     requests_mock.get(URL.ME.value, status_code=401)
-    mock_refresh_failure(requests_mock, "temporarily_unavailable", 503)
+    base_config_entry.add_to_hass(hass)
+
+    with refresh_unavailable(requests_mock, cause):
+        await hass.config_entries.async_setup(base_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert base_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert base_config_entry.reason == f"Unable to connect to MS Graph: {error}"
+    assert not issue_registry.issues
+
+
+@pytest.mark.parametrize("error", ["interaction_required", "unauthorized_client"])
+async def test_token_refresh_refused(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+    issue_registry: ir.IssueRegistry,
+    error,
+) -> None:
+    """Test a token the login service will no longer refresh raises the repair issue."""
+    MS365MOCKS.standard_mocks(requests_mock)
+    expire_access_token(tmp_path)
+    requests_mock.get(URL.ME.value, status_code=401)
+    mock_refresh_failure(requests_mock, error)
     base_config_entry.add_to_hass(hass)
 
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    assert base_config_entry.state is ConfigEntryState.SETUP_RETRY
-    assert base_config_entry.reason == "Unable to connect to MS Graph: HTTP Error: 503"
-    assert not issue_registry.issues
+    assert f"Token has expired for account: '{ENTITY_NAME}'" in caplog.text
+    assert "Error setting up entry" not in caplog.text
+    assert base_config_entry.state is ConfigEntryState.SETUP_ERROR
+    issues = list(issue_registry.issues.values())
+    assert [issue.translation_key for issue in issues] == ["expired"]
+    assert issues[0].translation_placeholders["entity_name"] == ENTITY_NAME
 
 
 async def test_expired_secret(

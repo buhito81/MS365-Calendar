@@ -1,12 +1,24 @@
 """Token refresh helpers for MS365 testing."""
 
+from contextlib import contextmanager
 import json
 import time
+from unittest.mock import patch
+
+from portalocker.exceptions import LockException
 
 from ..const import ENTITY_NAME, TOKEN_LOCATION
 from ..integration.const_integration import DOMAIN
 
+API = "custom_components.ms365_calendar.classes.api"
 LOGIN_URL = "https://login.microsoftonline.com/common"
+TOKEN_URL = f"{LOGIN_URL}/oauth2/v2.0/token"
+# The token cannot be refreshed for now, though nothing is wrong with it
+REFRESH_UNAVAILABLE = [
+    ("login", "HTTP Error: 503"),
+    ("busy", "Refresh token operation failed: temporarily_unavailable"),
+    ("locked", "Could not access locked token file after 3"),
+]
 
 
 def token_file(tmp_path):
@@ -36,7 +48,7 @@ def expire_access_token(tmp_path):
 def mock_refresh_failure(requests_mock, error, status_code=400):
     """Make the login service refuse to refresh the token."""
     requests_mock.post(
-        f"{LOGIN_URL}/oauth2/v2.0/token",
+        TOKEN_URL,
         status_code=status_code,
         json={"error": error, "error_description": f"AADSTS00000: {error}"},
     )
@@ -59,3 +71,17 @@ def mock_refresh_failure(requests_mock, error, status_code=400):
             ],
         },
     )
+
+
+@contextmanager
+def refresh_unavailable(requests_mock, cause):
+    """Have the token refresh fail for now, for a cause in REFRESH_UNAVAILABLE."""
+    if cause == "locked":
+        # Another refresh keeps the token file locked
+        with patch(f"{API}.Lock", side_effect=LockException), patch(f"{API}.time"):
+            yield
+    else:
+        # The login service is down, or too busy to refresh the token
+        status_code = 503 if cause == "login" else 400
+        mock_refresh_failure(requests_mock, "temporarily_unavailable", status_code)
+        yield
