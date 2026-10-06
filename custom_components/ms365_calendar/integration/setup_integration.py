@@ -72,7 +72,9 @@ async def _async_delete_calendar_entities(
 ):
     for calendar in deleted_calendars:
         for entity in calendar.get(CONF_ENTITIES):
-            await async_delete_calendar(hass, entry, entity[CONF_DEVICE_ID])
+            await async_delete_calendar(
+                hass, entry, calendar[CONF_CAL_ID], entity[CONF_DEVICE_ID]
+            )
 
 
 async def _async_setup_coordinators(
@@ -128,7 +130,8 @@ async def _async_setup_coordinators(
                     sync_manager = MS365CalendarEventSyncManager(
                         api,
                         cal_id,
-                        store=ScopedCalendarStore(local_store, unique_id),
+                        # Names can be shared, so keep the events of each entity apart
+                        store=ScopedCalendarStore(local_store, entity[CONF_DEVICE_ID]),
                         exclude=entity.get(CONF_EXCLUDE),
                     )
                     coordinators.append(
