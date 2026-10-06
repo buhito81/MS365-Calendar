@@ -12,7 +12,7 @@ from homeassistant.components.calendar import DOMAIN as CALENDAR_DOMAIN
 from homeassistant.components.calendar import SERVICE_GET_EVENTS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from requests.exceptions import HTTPError, ReadTimeout
+from requests.exceptions import HTTPError
 from requests_mock import Mocker
 from zoneinfo import ZoneInfo
 
@@ -303,7 +303,10 @@ async def test_first_sync_error(
     MS365MOCKS.standard_mocks(requests_mock)
 
     base_config_entry.add_to_hass(hass)
-    with patch("O365.calendar.Calendar.get_events", side_effect=ReadTimeout()):
+    # Not a connection or token error, as those fall back to the cache
+    with patch(
+        "O365.calendar.Calendar.get_events", side_effect=RuntimeError("Other error")
+    ):
         await hass.config_entries.async_setup(base_config_entry.entry_id)
         await hass.async_block_till_done()
 
