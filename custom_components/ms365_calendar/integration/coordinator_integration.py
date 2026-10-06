@@ -34,12 +34,12 @@ from .sync.timeline import MS365Timeline
 from .utils_integration import get_end_date, get_start_date
 
 _LOGGER = logging.getLogger(__name__)
-# How long the events of a range outside the synced window are kept, as a
-# dashboard asks for the range it shows again on every state update
-RANGE_CACHE_TIME = timedelta(minutes=5)
 # Maximum number of upcoming events to consider for state changes between
 # coordinator updates.
 # MAX_UPCOMING_EVENTS = 20
+# How long the events of a range outside the synced window are kept, as a
+# dashboard asks for the range it shows again on every state update
+RANGE_CACHE_TIME = timedelta(minutes=5)
 
 
 class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
@@ -135,7 +135,7 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
                 "Fetch events from api - %s - %s - %s", self.name, start_date, end_date
             )
             try:
-                events = await self.sync.async_list_events(start_date, end_date)
+                return await self._async_list_range(start_date, end_date)
             except (HTTPError, RetryError, RequestConnectionError) as err:
                 # The synced data has nothing for this range, so it cannot stand in
                 if end_date <= self._last_sync_min or start_date >= self._last_sync_max:
@@ -147,10 +147,6 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
                     "from MS Graph, fetching from cache.",
                     err,
                 )
-            else:
-                self._error = False
-                self._keep_range(start_date, end_date, events)
-                return events
         _LOGGER.debug(
             "Fetch events from cache - %s - %s - %s",
             self.name,
@@ -163,13 +159,17 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             end_date,
         )
 
-    def _keep_range(self, start_date, end_date, events):
-        """Keep the events of a range, and drop the ranges that have expired."""
+    async def _async_list_range(self, start_date, end_date):
+        """Get the events of a range from MS Graph and keep them for a while."""
+        events = await self.sync.async_list_events(start_date, end_date)
+        # It worked, so log the next failure as a new one
+        self._error = False
         now = dt_util.utcnow()
         self._range_cache = {
             key: value for key, value in self._range_cache.items() if now < value[0]
         }
         self._range_cache[(start_date, end_date)] = (now + RANGE_CACHE_TIME, events)
+        return events
 
     def get_current_event(self):
         """Get the current event."""
