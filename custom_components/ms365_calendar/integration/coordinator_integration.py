@@ -34,6 +34,9 @@ from .sync.timeline import MS365Timeline
 from .utils_integration import get_end_date, get_start_date
 
 _LOGGER = logging.getLogger(__name__)
+# How long the events of a range outside the synced window are kept, as a
+# dashboard asks for the range it shows again on every state update
+RANGE_CACHE_TIME = timedelta(minutes=5)
 # Maximum number of upcoming events to consider for state changes between
 # coordinator updates.
 # MAX_UPCOMING_EVENTS = 20
@@ -83,6 +86,12 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         self.entity = entity
         self._error = False
         self.sync_state = STATE_UNKNOWN
+        self._range_cache = {}
+
+    async def async_refresh(self) -> None:
+        """Refresh data and drop the kept ranges, so a change made here shows."""
+        self._range_cache.clear()
+        await super().async_refresh()
 
     async def _async_update_data(self) -> MS365Timeline:
         """Fetch data from API endpoint."""
@@ -117,19 +126,31 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             )
 
         # If the request is for outside of the synced data, manually request it now,
-        # will not cache it though
+        # and keep it for a few minutes
         if start_date < self._last_sync_min or end_date > self._last_sync_max:
+            cached = self._range_cache.get((start_date, end_date))
+            if cached and dt_util.utcnow() < cached[0]:
+                return cached[1]
             _LOGGER.debug(
                 "Fetch events from api - %s - %s - %s", self.name, start_date, end_date
             )
             try:
-                return await self.sync.async_list_events(start_date, end_date)
+                events = await self.sync.async_list_events(start_date, end_date)
             except (HTTPError, RetryError, RequestConnectionError) as err:
+                # The synced data has nothing for this range, so it cannot stand in
+                if end_date <= self._last_sync_min or start_date >= self._last_sync_max:
+                    raise HomeAssistantError(
+                        f"Unable to get events from MS Graph: {err}"
+                    ) from err
                 self._log_error(
                     "Error getting calendar event range "
                     "from MS Graph, fetching from cache.",
                     err,
                 )
+            else:
+                self._error = False
+                self._keep_range(start_date, end_date, events)
+                return events
         _LOGGER.debug(
             "Fetch events from cache - %s - %s - %s",
             self.name,
@@ -141,6 +162,14 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             start_date,
             end_date,
         )
+
+    def _keep_range(self, start_date, end_date, events):
+        """Keep the events of a range, and drop the ranges that have expired."""
+        now = dt_util.utcnow()
+        self._range_cache = {
+            key: value for key, value in self._range_cache.items() if now < value[0]
+        }
+        self._range_cache[(start_date, end_date)] = (now + RANGE_CACHE_TIME, events)
 
     def get_current_event(self):
         """Get the current event."""

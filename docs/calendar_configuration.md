@@ -74,7 +74,7 @@ To configure a Group Calendar, add an extra section to `ms365_calendars_<entity_
 
 ## Exclude
 
-To exclude calendar items from being displayed, e.g. cancelled events, the exclude attribute can be used. This takes straight strings or can be configured with a regex for more complex exclusions.
+To exclude calendar items from being displayed, the exclude attribute can be used. This takes straight strings or can be configured with a regex for more complex exclusions. Meetings the organizer has cancelled are always left out, so they do not need an exclude.
 
 ```yaml
     exclude:

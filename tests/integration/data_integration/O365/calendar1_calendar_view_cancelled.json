@@ -1,0 +1,75 @@
+{
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('fake-user-id')/calendars('calendar1')/calendarView(subject,body,attendees,categories,sensitivity,start,seriesMasterId,isAllDay,end,showAs,location,isCancelled)",
+    "value": [
+        {
+            "@odata.etag": "W/\"qIkRKy24jUSQwhcjI6uJIQAIopRuag==\"",
+            "id": "cancelled1",
+            "categories": [],
+            "reminderMinutesBeforeStart": 15,
+            "isReminderOn": true,
+            "subject": "Canceled: Weekly sync",
+            "sensitivity": "normal",
+            "isAllDay": false,
+            "isCancelled": true,
+            "seriesMasterId": null,
+            "showAs": "free",
+            "body": {
+                "contentType": "text",
+                "content": "This meeting has been cancelled"
+            },
+            "start": {
+                "dateTime": "2020-01-01T00:00:00.0000000",
+                "timeZone": "UTC"
+            },
+            "end": {
+                "dateTime": "2020-01-02T23:59:59.0000000",
+                "timeZone": "UTC"
+            },
+            "location": {
+                "displayName": "Room 1"
+            },
+            "attendees": [],
+            "organizer": {
+                "emailAddress": {
+                    "name": "John Doe",
+                    "address": "john@nomail.com"
+                }
+            }
+        },
+        {
+            "@odata.etag": "W/\"qIkRKy24jUSQwhcjI6uJIQAIopRuag==\"",
+            "id": "event2",
+            "categories": [],
+            "reminderMinutesBeforeStart": 15,
+            "isReminderOn": true,
+            "subject": "Test live event",
+            "sensitivity": "normal",
+            "isAllDay": false,
+            "isCancelled": false,
+            "seriesMasterId": null,
+            "showAs": "busy",
+            "body": {
+                "contentType": "text",
+                "content": "Still on"
+            },
+            "start": {
+                "dateTime": "2099-01-01T10:00:00.0000000",
+                "timeZone": "UTC"
+            },
+            "end": {
+                "dateTime": "2099-01-01T11:00:00.0000000",
+                "timeZone": "UTC"
+            },
+            "location": {
+                "displayName": "Room 2"
+            },
+            "attendees": [],
+            "organizer": {
+                "emailAddress": {
+                    "name": "John Doe",
+                    "address": "john@nomail.com"
+                }
+            }
+        }
+    ]
+}

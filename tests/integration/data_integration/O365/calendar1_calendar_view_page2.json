@@ -1,0 +1,40 @@
+{
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('fake-user-id')/calendars('calendar1')/calendarView(subject,body,attendees,categories,sensitivity,start,seriesMasterId,isAllDay,end,showAs,location,isCancelled)",
+    "value": [
+        {
+            "@odata.etag": "W/\"qIkRKy24jUSQwhcjI6uJIQAIopRuag==\"",
+            "id": "event_page2",
+            "categories": [],
+            "reminderMinutesBeforeStart": 0,
+            "isReminderOn": false,
+            "subject": "Test event page 2",
+            "sensitivity": "normal",
+            "isAllDay": false,
+            "isCancelled": false,
+            "seriesMasterId": null,
+            "showAs": "busy",
+            "body": {
+                "contentType": "text",
+                "content": "Page 2"
+            },
+            "start": {
+                "dateTime": "2020-01-01T00:00:00.0000000",
+                "timeZone": "UTC"
+            },
+            "end": {
+                "dateTime": "2020-01-02T23:59:59.0000000",
+                "timeZone": "UTC"
+            },
+            "location": {
+                "displayName": "Room 2"
+            },
+            "attendees": [],
+            "organizer": {
+                "emailAddress": {
+                    "name": "John Doe",
+                    "address": "john@nomail.com"
+                }
+            }
+        }
+    ]
+}

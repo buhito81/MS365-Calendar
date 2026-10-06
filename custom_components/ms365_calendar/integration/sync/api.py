@@ -53,7 +53,7 @@ class MS365CalendarService:
         self._account = account
         self.group_calendar = calendar_id.startswith(CONST_GROUP)
         self._sensitivity_exclude = sensitivity_exclude
-        self._limit = 999
+        self._limit = None
         self._search = search
         self._builder = QueryBuilder(protocol=account.protocol)
         self._entity_id = entity_id
@@ -110,6 +110,7 @@ class MS365CalendarService:
             "series_master_id",
             "is_reminder_on",
             "reminderMinutesBeforeStart",
+            "is_cancelled",
         )
 
         if self._search is not None:
@@ -124,7 +125,7 @@ class MS365CalendarService:
         # try:
         return await self.hass.async_add_executor_job(
             ft.partial(
-                self.calendar.get_events,
+                self._get_all_events,
                 limit=self._limit,
                 query=query,
                 include_recurring=True,
@@ -135,6 +136,10 @@ class MS365CalendarService:
         # except (HTTPError, RetryError, ConnectionError) as err:
         #     self._log_error("Error getting calendar events for data", err)
         #     return None
+
+    def _get_all_events(self, **kwargs):
+        """Get every event; past one page O365 gives pages that load when read."""
+        return list(self.calendar.get_events(**kwargs))
 
     async def async_create_event(self, subject, start, end, **kwargs) -> Event:
         """Add a new event to calendar."""

@@ -205,17 +205,22 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
     @property
     def event(self):
         """Event property."""
+        # The alarm at the end of the event only writes the state, so move on to an
+        # event that follows or overlaps it now, rather than at the next update
+        if (
+            self._event is not None
+            and self.coordinator.data is not None
+            and dt_util.now() >= self._event.end_datetime_local
+        ):
+            self._get_current_event()
         return self._event
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
-
-        self.coordinator.config_entry.async_create_background_task(
-            self.hass,
-            self.coordinator.async_request_refresh(),
-            "mS365.calendar-refresh",
-        )
+        # The first refresh ran at setup, so start with its events
+        if self.coordinator.data is not None:
+            self._update_status()
 
     async def async_get_events(self, hass: HomeAssistant, start_date, end_date):
         """Get events."""
