@@ -227,13 +227,15 @@ async def test_remove_event_token_refresh_unavailable(
         _refresh_unavailable(requests_mock, cause),
         pytest.raises(HomeAssistantError) as exc_info,
     ):
-        await hass.services.async_call(
-            DOMAIN,
-            "remove_calendar_event",
-            {"entity_id": "calendar.test_calendar1", "event_id": "event1"},
-            blocking=True,
-        )
+        await _async_remove_event1(hass)
     assert str(exc_info.value) == f"Unable to connect to MS Graph: {error}"
+
+    # Other errors are not taken for a connection problem
+    with (
+        patch("O365.calendar.Calendar.get_event", side_effect=RuntimeError("Other")),
+        pytest.raises(RuntimeError, match="Other"),
+    ):
+        await _async_remove_event1(hass)
 
 
 async def test_respond_refused(
@@ -316,6 +318,15 @@ async def _async_expire_token(hass: HomeAssistant, tmp_path, entry):
     await hass.async_add_executor_job(expire_access_token, tmp_path)
     token_backend = entry.runtime_data.ha_account.account.con.token_backend
     await hass.async_add_executor_job(token_backend.load_token)
+
+
+async def _async_remove_event1(hass: HomeAssistant):
+    await hass.services.async_call(
+        DOMAIN,
+        "remove_calendar_event",
+        {"entity_id": "calendar.test_calendar1", "event_id": "event1"},
+        blocking=True,
+    )
 
 
 @contextmanager
