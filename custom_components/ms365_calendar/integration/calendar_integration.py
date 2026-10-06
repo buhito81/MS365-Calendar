@@ -220,18 +220,16 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
         """Event property."""
         # The alarm at the end of the event only writes the state, so move on to an
         # event that follows or overlaps it now, rather than at the next update
-        if (
-            self._event is not None
-            and self.coordinator.data is not None
-            and dt_util.now() >= self._event.end_datetime_local
-        ):
+        if self._event is not None and dt_util.now() >= self._event.end_datetime_local:
             self._get_current_event()
         return self._event
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
-        # The first refresh ran at setup, so start with its events
+        # The first refresh ran at setup, so start with its events. It has no data
+        # only when it failed with an error that is not caught, and the coordinator
+        # then only updates the entity again once a refresh has worked
         if self.coordinator.data is not None:
             self._update_status()
 
@@ -299,10 +297,7 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
         _LOGGER.debug("End update for %s", self.name)
 
     def _get_current_event(self):
-        vevent = None
-        # No data yet when the first refresh failed with an error that is not caught
-        if self.coordinator.data is not None:
-            vevent = self.coordinator.get_current_event()
+        vevent = self.coordinator.get_current_event()
         if not vevent:
             _LOGGER.debug(
                 "No matching event found in the calendar results for %s",
