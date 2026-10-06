@@ -102,6 +102,7 @@ INDEXES = {
     "-1": "last",
 }
 ITEMS = "items"
+MAX_CALENDARS = 50
 
 PERM_CALENDARS_READ = "Calendars.Read"
 PERM_CALENDARS_READBASIC = "Calendars.ReadBasic"

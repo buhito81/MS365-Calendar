@@ -18,6 +18,7 @@ from .const_integration import (
     CONF_ENTITIES,
     CONF_TRACK,
     CONST_GROUP,
+    MAX_CALENDARS,
     YAML_CALENDARS_FILENAME,
 )
 from .schema_integration import YAML_CALENDAR_DEVICE_SCHEMA
@@ -114,6 +115,13 @@ async def async_check_for_deleted_calendars(
     if not calendars:
         # Every account has a calendar, so an empty list means the scan failed
         _LOGGER.warning("No calendars found, so none deleted from yaml file")
+        return []
+    if len(calendars) >= MAX_CALENDARS:
+        # Only the first calendars are read, so a missing one may still exist
+        _LOGGER.info(
+            "Only the first %s calendars are read, so none deleted from yaml file",
+            MAX_CALENDARS,
+        )
         return []
 
     path = build_yaml_filename(entry, YAML_CALENDARS_FILENAME)

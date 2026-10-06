@@ -26,6 +26,7 @@ from ..const_integration import (
     CONST_GROUP,
     DOMAIN,
     ITEMS,
+    MAX_CALENDARS,
     EventResponse,
 )
 from ..filemgmt_integration import (
@@ -341,7 +342,9 @@ async def async_scan_for_calendars(
     builder = QueryBuilder(protocol=account.protocol)
     query = builder.select("name", "id", "canEdit", "color", "hexColor")
 
-    calendars = await hass.async_add_executor_job(_list_all_calendars, schedule, query)
+    calendars = await hass.async_add_executor_job(
+        ft.partial(schedule.list_calendars, query=query, limit=MAX_CALENDARS)
+    )
     track = entry.options.get(CONF_TRACK_NEW_CALENDAR, True)
     for calendar in calendars:
         await async_update_calendar_file(
@@ -352,8 +355,3 @@ async def async_scan_for_calendars(
         )
     deleted_calendars = await async_check_for_deleted_calendars(entry, calendars, hass)
     return calendars, deleted_calendars
-
-
-def _list_all_calendars(schedule, query):
-    """Get every calendar; past one page O365 gives pages that load when read."""
-    return list(schedule.list_calendars(query=query))

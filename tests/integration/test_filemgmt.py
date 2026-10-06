@@ -1,10 +1,17 @@
 # pylint: disable=unused-argument,line-too-long,wrong-import-order
 """Test file management."""
 
+import json
+
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from requests_mock import Mocker
+
+from custom_components.ms365_calendar.integration.const_integration import (
+    CONF_TRACK_NEW_CALENDAR,
+    MAX_CALENDARS,
+)
 
 from ..helpers.mock_config_entry import MS365MockConfigEntry
 from ..helpers.utils import load_json, mock_call
@@ -138,7 +145,7 @@ async def test_file_without_newline(
     check_yaml_file_contents(tmp_path, "ms365_calendars_base")
 
 
-async def test_calendars_over_two_pages(
+async def test_calendar_limit_reached(
     tmp_path,
     hass: HomeAssistant,
     requests_mock: Mocker,
@@ -146,20 +153,29 @@ async def test_calendars_over_two_pages(
     base_config_entry: MS365MockConfigEntry,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test calendars on a second page are found and not deleted."""
+    """Test no calendars are deleted when the scan returns the most it reads."""
     MS365MOCKS.standard_mocks(requests_mock)
-    requests_mock.get(URL.CALENDARS.value, text=load_json("O365/calendars_page1.json"))
-    requests_mock.get(
-        f"{URL.CALENDARS.value}?$skip=2", text=load_json("O365/calendars_page2.json")
-    )
+    # calendar3 is past the first 50 calendars
+    data = json.loads(load_json("O365/calendars.json"))
+    first = data["value"][0]
+    data["value"] = [first] + [
+        {**first, "id": f"calendar{number}", "name": f"Calendar{number}"}
+        for number in range(4, 4 + MAX_CALENDARS - 1)
+    ]
+    requests_mock.get(URL.CALENDARS.value, json=data)
     yaml_setup(tmp_path, "ms365_calendars_base")
 
     base_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        base_config_entry, options={CONF_TRACK_NEW_CALENDAR: False}
+    )
 
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    check_yaml_file_contents(tmp_path, "ms365_calendars_base")
+    calendar_ids = [calendar["cal_id"] for calendar in read_yaml_file(tmp_path)]
+    assert "calendar3" in calendar_ids
+    assert len(calendar_ids) == 2 + MAX_CALENDARS
     assert "Calendar deleted from" not in caplog.text
 
 
