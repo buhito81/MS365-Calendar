@@ -44,8 +44,9 @@ _LOGGER = logging.getLogger(__name__)
 # Maximum number of upcoming events to consider for state changes between
 # coordinator updates.
 # MAX_UPCOMING_EVENTS = 20
-# How long the events of a range outside the synced window are kept, as a
-# dashboard asks for the range it shows again on every state update
+# How long the events of a range outside the synced window are kept at most, as
+# a dashboard can ask for the range it shows again and again; every sync drops
+# them, so a change shows after the next sync
 RANGE_CACHE_TIME = timedelta(minutes=5)
 
 
@@ -95,14 +96,11 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         self.sync_state = STATE_UNKNOWN
         self._range_cache = {}
 
-    async def async_refresh(self) -> None:
-        """Refresh data and drop the kept ranges, so a change made here shows."""
-        self._range_cache.clear()
-        await super().async_refresh()
-
     async def _async_update_data(self) -> MS365Timeline:
         """Fetch data from API endpoint."""
         _LOGGER.debug("Started fetching %s data", self.name)
+        # Scheduled or not, so a change made here or elsewhere shows in a range too
+        self._range_cache.clear()
 
         self._last_sync_min = dt_util.now() + self._sync_event_min_time
         self._last_sync_max = dt_util.now() + self._sync_event_max_time
@@ -183,9 +181,7 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         self._range_cache = {
             key: value for key, value in self._range_cache.items() if now < value[0]
         }
-        # Keep it at least until just after the next update writes the state again
-        keep = max(RANGE_CACHE_TIME, self.update_interval + timedelta(minutes=1))
-        self._range_cache[(start_date, end_date)] = (now + keep, events)
+        self._range_cache[(start_date, end_date)] = (now + RANGE_CACHE_TIME, events)
         return events
 
     def get_current_event(self):

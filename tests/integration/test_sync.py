@@ -244,15 +244,6 @@ async def test_range_outside_window_kept(
     assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
     assert _range_fetches(requests_mock, "2022-03-22") == 1
 
-    # A scheduled update keeps it
-    synced = _window_fetches(requests_mock)
-    freezer.tick(timedelta(seconds=61))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
-    assert _window_fetches(requests_mock) > synced
-    assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
-    assert _range_fetches(requests_mock, "2022-03-22") == 1
-
     # Past the five minutes it is kept for, it is fetched again
     freezer.tick(timedelta(minutes=6))
     assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
@@ -264,28 +255,61 @@ async def test_range_outside_window_kept(
     assert _range_fetches(requests_mock, "2022-03-22") == 3
 
 
-@pytest.mark.parametrize(
-    "base_config_entry",
-    [{"options": {CONF_ADVANCED_OPTIONS: {CONF_UPDATE_INTERVAL: 600}}}],
-    indirect=True,
-)
-async def test_range_kept_past_long_update_interval(
+async def test_range_outside_window_changed_elsewhere(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
     setup_base_integration,
     requests_mock: Mocker,
 ) -> None:
-    """Test a range is kept past the next update when updates are far apart."""
+    """Test a change made in Outlook shows in a kept range after the next sync."""
     first = await _get_events(hass, OUTSIDE_START, OUTSIDE_END)
     assert len(first) == 2
 
+    _add_meeting_in_outlook(requests_mock)
+
+    # Until the next sync the kept range is used
+    assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
+    assert _range_fetches(requests_mock, "2022-03-22") == 1
+
     synced = _window_fetches(requests_mock)
-    freezer.tick(timedelta(seconds=601))
+    freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
     assert _window_fetches(requests_mock) > synced
+
+    events = await _get_events(hass, OUTSIDE_START, OUTSIDE_END)
+    assert sorted(event["summary"] for event in events) == [
+        "Added in Outlook",
+        *sorted(event["summary"] for event in first),
+    ]
+    assert _range_fetches(requests_mock, "2022-03-22") == 2
+
+
+@pytest.mark.parametrize(
+    "base_config_entry",
+    [{"options": {CONF_ADVANCED_OPTIONS: {CONF_UPDATE_INTERVAL: 600}}}],
+    indirect=True,
+)
+async def test_range_kept_five_minutes_with_long_update_interval(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    setup_base_integration,
+    requests_mock: Mocker,
+) -> None:
+    """Test a range is kept five minutes at most, also when syncs are far apart."""
+    first = await _get_events(hass, OUTSIDE_START, OUTSIDE_END)
+    assert len(first) == 2
+
+    freezer.tick(timedelta(minutes=4))
     assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
     assert _range_fetches(requests_mock, "2022-03-22") == 1
+
+    # Before the next sync, which is ten minutes after the last one
+    synced = _window_fetches(requests_mock)
+    freezer.tick(timedelta(minutes=2))
+    assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
+    assert _range_fetches(requests_mock, "2022-03-22") == 2
+    assert _window_fetches(requests_mock) == synced
 
 
 async def test_range_error_logged_again_after_recovery(
@@ -406,6 +430,19 @@ def _calendar_view(datafile, times):
         event["start"]["dateTime"] = start.strftime(GRAPH_TIME)
         event["end"]["dateTime"] = end.strftime(GRAPH_TIME)
     return json.dumps(data)
+
+
+def _add_meeting_in_outlook(requests_mock: Mocker):
+    """Have MS Graph return one more meeting for calendar 1 from now on."""
+    data = json.loads(
+        load_json("O365/calendar1_calendar_view.json")
+        .replace("2020-01-01", (utcnow() - timedelta(days=1)).strftime("%Y-%m-%d"))
+        .replace("2020-01-02", (utcnow() + timedelta(days=1)).strftime("%Y-%m-%d"))
+    )
+    data["value"].append(
+        {**data["value"][0], "id": "added", "subject": "Added in Outlook"}
+    )
+    requests_mock.get(CALENDAR1_VIEW, text=json.dumps(data))
 
 
 def _range_fetches(requests_mock: Mocker, day):
