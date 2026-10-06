@@ -1,8 +1,9 @@
 """Calendar utilities processes."""
 
-from datetime import datetime
+from datetime import datetime, time
 import logging
 import warnings
+from zoneinfo import ZoneInfoNotFoundError
 
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from dateutil import parser
@@ -11,12 +12,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util, slugify
 from O365.calendar import Attendee  # pylint: disable=no-name-in-module)
+from O365.utils.windows_tz import (  # pylint: disable=no-name-in-module, import-error
+    get_windows_tz,
+)
 
 from ..classes.config_entry import MS365ConfigEntry
 from ..const import CONF_ENTITY_NAME
 from .const_integration import (
     ATTR_ATTENDEES,
     ATTR_BODY,
+    ATTR_BODY_IS_TEXT,
     ATTR_CATEGORIES,
     ATTR_IS_ALL_DAY,
     ATTR_IS_REMINDER_ON,
@@ -100,32 +105,71 @@ def get_start_date(obj):
 
 
 def add_call_data_to_event(event, subject, start, end, **kwargs):
-    """Add the call data."""
-    event.subject = _add_attribute(subject, event.subject)
-    event.body = _add_attribute(kwargs.get(ATTR_BODY), event.body)
-    event.location = _add_attribute(kwargs.get(ATTR_LOCATION), event.location)
-    event.categories = _add_attribute(kwargs.get(ATTR_CATEGORIES, []), event.categories)
-    event.show_as = _add_attribute(kwargs.get(ATTR_SHOW_AS), event.show_as)
-    event.start = _add_attribute(start, event.start)
-    event.end = _add_attribute(end, event.end)
-    event.is_reminder_on = _add_attribute(
-        kwargs.get(ATTR_IS_REMINDER_ON), event.is_reminder_on
-    )
+    """Add the call data.
+
+    Only what is supplied is set. O365 sends every attribute that has been set, even
+    to its current value, so anything else is left out of an update.
+    """
+    is_all_day = _is_all_day(kwargs.get(ATTR_IS_ALL_DAY), event, start, end)
+    _add_attribute(event, "subject", subject)
+    _add_body(kwargs.get(ATTR_BODY), kwargs.get(ATTR_BODY_IS_TEXT, False), event)
+    _add_location(kwargs.get(ATTR_LOCATION), event)
+    _add_attribute(event, "categories", kwargs.get(ATTR_CATEGORIES))
+    _add_attribute(event, "show_as", kwargs.get(ATTR_SHOW_AS))
+    _add_attribute(event, "start", start)
+    _add_attribute(event, "end", end)
+    _add_attribute(event, "is_reminder_on", kwargs.get(ATTR_IS_REMINDER_ON))
     if event.is_reminder_on:
-        event.remind_before_minutes = _add_attribute(
-            kwargs.get(ATTR_REMIND_BEFORE_MINUTES), event.remind_before_minutes
+        _add_attribute(
+            event, "remind_before_minutes", kwargs.get(ATTR_REMIND_BEFORE_MINUTES)
         )
-    event.sensitivity = _add_attribute(kwargs.get(ATTR_SENSITIVITY), event.sensitivity)
+    _add_attribute(event, "sensitivity", kwargs.get(ATTR_SENSITIVITY))
     _add_attendees(kwargs.get(ATTR_ATTENDEES, []), event)
-    _add_all_day(kwargs.get(ATTR_IS_ALL_DAY, False), event)
+    _add_all_day(is_all_day, event)
 
     if kwargs.get(ATTR_RRULE):
         _rrule_processing(event, kwargs[ATTR_RRULE])
     return event
 
 
-def _add_attribute(attribute, event_attribute):
-    return attribute if attribute is not None else event_attribute
+def is_unchanged_text(text, body):
+    """Check if text from the HA calendar is just the text of the body."""
+    return text is not None and text.strip() == clean_html(body).strip()
+
+
+def _add_attribute(event, name, value):
+    if value is not None:
+        setattr(event, name, value)
+
+
+def _add_body(body, body_is_text, event):
+    if body is None:
+        return
+    if body_is_text:
+        # The HA calendar only has the text from clean_html, so writing it back
+        # unchanged would replace the HTML body and lose its links and formatting
+        if is_unchanged_text(body, event.body):
+            return
+        event.body_type = "text"
+    event.body = body
+
+
+def _add_location(location, event):
+    # Only a name can be given, and Graph replaces the whole location (and any other
+    # locations, such as a room) when it is set, so an unchanged name is not sent
+    if location is not None and location != event.location.get("displayName"):
+        event.location = location
+
+
+def _is_all_day(is_all_day, event, start, end):
+    """Work out the all day setting when the caller did not give one."""
+    if is_all_day is not None or not event.is_all_day:
+        return is_all_day
+    # Times of day on an all day event mean it is moving to a timed slot
+    for value in (start, end):
+        if isinstance(value, datetime) and dt_util.as_local(value).time() != time():
+            return False
+    return None
 
 
 def _add_attendees(attendees, event):
@@ -169,13 +213,12 @@ def _rrule_processing(event, rrule):
         keys = item.split("=")
         rules[keys[0]] = keys[1]
 
-    kwargs = {}
+    # Without a start date, O365 starts the series today rather than on the event
+    kwargs = {"start": _local_date(event.start, event.is_all_day)}
     if "COUNT" in rules:
         kwargs["occurrences"] = int(rules["COUNT"])
     if "UNTIL" in rules:
-        end = parser.parse(rules["UNTIL"])
-        end.replace(tzinfo=event.start.tzinfo)
-        kwargs["end"] = end
+        kwargs["end"] = _local_date(parser.parse(rules["UNTIL"]), False)
     interval = int(rules["INTERVAL"]) if "INTERVAL" in rules else 1
     if "BYDAY" in rules:
         days, index = _process_byday(rules["BYDAY"])
@@ -188,16 +231,41 @@ def _rrule_processing(event, rrule):
         event.recurrence.set_yearly(interval, event.start.month, **kwargs)
 
     if rules["FREQ"] == "MONTHLY":
-        if "BYDAY" not in rules:
-            kwargs["day_of_month"] = event.start.day
+        if rules.get("BYMONTHDAY") == "-1":
+            # Outlook's 'last day of the month' is the last of any day of the week
+            kwargs["days_of_week"] = list(DAYS.values())
+            kwargs["index"] = "last"
+        elif "BYDAY" not in rules:
+            kwargs["day_of_month"] = int(rules.get("BYMONTHDAY", event.start.day))
         event.recurrence.set_monthly(interval, **kwargs)
 
     if rules["FREQ"] == "WEEKLY":
         kwargs["first_day_of_week"] = "sunday"
+        # Without BYDAY the series repeats on the day of the week it starts on
+        weekday = list(DAYS.values())[kwargs["start"].weekday()]
+        kwargs.setdefault("days_of_week", [weekday])
         event.recurrence.set_weekly(interval, **kwargs)
 
     if rules["FREQ"] == "DAILY":
         event.recurrence.set_daily(interval, **kwargs)
+
+    # The range dates are local dates, so Graph has to read them in the local zone
+    try:
+        event.recurrence.recurrence_time_zone = get_windows_tz(
+            dt_util.get_default_time_zone()
+        )
+    except ZoneInfoNotFoundError:
+        _LOGGER.debug(
+            "No Windows time zone for %s, recurrence time zone left unchanged",
+            dt_util.get_default_time_zone(),
+        )
+
+
+def _local_date(value, is_all_day):
+    """Get the date as HA shows it; all day and naive values are already local."""
+    if is_all_day or value.tzinfo is None:
+        return value.date()
+    return dt_util.as_local(value).date()
 
 
 def _process_byday(byday):

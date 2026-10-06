@@ -1,0 +1,42 @@
+{
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('fake-user-id')/calendars",
+    "@odata.etag": "W/\"qIkRKy24jUSQwhcjI6uJIQAIopRuag==\"",
+    "id": "occurrence3",
+    "type": "occurrence",
+    "categories": [],
+    "reminderMinutesBeforeStart": 0,
+    "isReminderOn": false,
+    "subject": "Weekly sync",
+    "sensitivity": "normal",
+    "isAllDay": false,
+    "seriesMasterId": "master3",
+    "showAs": "busy",
+    "body": {
+        "contentType": "html",
+        "content": "<html>\r\n<body>\r\n<p>Weekly sync - agenda: budget</p>\r\n</body>\r\n</html>\r\n"
+    },
+    "start": {
+        "dateTime": "2026-11-02T18:00:00.0000000",
+        "timeZone": "UTC"
+    },
+    "end": {
+        "dateTime": "2026-11-02T19:00:00.0000000",
+        "timeZone": "UTC"
+    },
+    "location": {
+        "displayName": "Room A",
+        "locationType": "conferenceRoom",
+        "locationUri": "room-a@example.com",
+        "uniqueId": "room-a@example.com",
+        "uniqueIdType": "directory",
+        "address": {
+            "street": "1 Main Street",
+            "city": "Springfield",
+            "state": "",
+            "countryOrRegion": "",
+            "postalCode": "12345"
+        },
+        "coordinates": {}
+    },
+    "attendees": []
+}

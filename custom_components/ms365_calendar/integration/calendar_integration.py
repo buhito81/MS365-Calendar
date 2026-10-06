@@ -9,6 +9,7 @@ from typing import Any, cast
 from homeassistant.components.calendar import (
     EVENT_DESCRIPTION,
     EVENT_END,
+    EVENT_LOCATION,
     EVENT_RRULE,
     EVENT_START,
     EVENT_SUMMARY,
@@ -28,10 +29,13 @@ from ..classes.entity import MS365Entity
 from ..const import CONF_ENABLE_UPDATE, CONF_ENTITY_NAME, EVENT_HA_EVENT
 from .const_integration import (
     ATTR_ALL_DAY,
+    ATTR_BODY,
+    ATTR_BODY_IS_TEXT,
     ATTR_COLOR,
     ATTR_DATA,
     ATTR_EVENT_ID,
     ATTR_HEX_COLOR,
+    ATTR_LOCATION,
     ATTR_SYNC_STATE,
     CONF_CAN_EDIT,
     CONF_DEVICE_ID,
@@ -62,6 +66,7 @@ from .utils_integration import (
     format_event_data,
     get_end_date,
     get_hass_date,
+    is_unchanged_text,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -307,14 +312,17 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
         is_all_day = not isinstance(start, datetime)
         subject = kwargs[EVENT_SUMMARY]
         body = kwargs.get(EVENT_DESCRIPTION)
+        location = kwargs.get(EVENT_LOCATION)
         rrule = kwargs.get(EVENT_RRULE)
         return await self.async_create_calendar_event(
             subject,
             start,
             end,
             body=body,
+            location=location,
             is_all_day=is_all_day,
             rrule=rrule,
+            body_is_text=True,
         )
 
     async def async_update_event(
@@ -330,6 +338,7 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
         is_all_day = not isinstance(start, datetime)
         subject = event[EVENT_SUMMARY]
         body = event.get(EVENT_DESCRIPTION)
+        location = event.get(EVENT_LOCATION)
         rrule = event.get(EVENT_RRULE)
         await self.async_modify_calendar_event(
             event_id=uid,
@@ -339,8 +348,10 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
             start=start,
             end=end,
             body=body,
+            location=location,
             is_all_day=is_all_day,
             rrule=rrule,
+            body_is_text=True,
         )
 
     async def async_delete_event(
@@ -385,6 +396,18 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
             _group_calendar_log(self.entity_id)
 
         if recurrence_range:
+            occurrence = await self.api.async_get_event(event_id)
+            start, end = await self._async_get_series_start_end(
+                occurrence, recurrence_id, start, end
+            )
+            # The text and location shown were the occurrence's, so check those
+            # against what was sent
+            if kwargs.get(ATTR_BODY_IS_TEXT) and is_unchanged_text(
+                kwargs.get(ATTR_BODY), occurrence.body
+            ):
+                kwargs[ATTR_BODY] = None
+            if kwargs.get(ATTR_LOCATION) == occurrence.location.get("displayName"):
+                kwargs[ATTR_LOCATION] = None
             await self._async_update_calendar_event(
                 recurrence_id,
                 EVENT_MODIFY_CALENDAR_RECURRENCES,
@@ -398,6 +421,34 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
                 event_id, EVENT_MODIFY_CALENDAR_EVENT, subject, start, end, **kwargs
             )
         await self.coordinator.async_refresh()
+
+    async def _async_get_series_start_end(self, occurrence, series_id, start, end):
+        """Move the change made to one occurrence onto the whole series.
+
+        Graph has no 'this and following' edit, so the series is changed. The series
+        has to keep its own start date, so only a change to the time of day or the
+        length is carried over, and moving the occurrence to another day is refused.
+        The series is kept in the local time zone so it still follows daylight saving.
+        """
+        series = await self.api.async_get_event(series_id)
+        if _event_date(start, False) != _event_date(
+            occurrence.start, occurrence.is_all_day
+        ):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="series_date_change",
+            )
+
+        series_date = _event_date(series.start, series.is_all_day)
+        if not isinstance(start, datetime):
+            return series_date, series_date + (end - start)
+        if occurrence.is_all_day or series.is_all_day:
+            series_start = datetime.combine(series_date, start.timetz())
+        else:
+            # Compare clock times, so the change is the same either side of a DST change
+            change = _clock_time(start) - _clock_time(occurrence.start)
+            series_start = dt_util.as_local(series.start) + change
+        return series_start, series_start + (end - start)
 
     async def _async_update_calendar_event(
         self, event_id, ha_event, subject, start, end, **kwargs
@@ -499,6 +550,20 @@ def _group_calendar_log(entity_id):
             "entity_id": entity_id,
         },
     )
+
+
+def _event_date(value, is_all_day):
+    """Get the date as HA shows it; all day events keep their own date."""
+    if not isinstance(value, datetime):
+        return value
+    if is_all_day:
+        return value.date()
+    return dt_util.as_local(value).date()
+
+
+def _clock_time(value: datetime) -> datetime:
+    """Get the local date and time as shown on a clock, without the time zone."""
+    return dt_util.as_local(value).replace(tzinfo=None)
 
 
 def _with_default_timezone(value: datetime) -> datetime:
