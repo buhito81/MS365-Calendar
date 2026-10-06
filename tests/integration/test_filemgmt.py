@@ -8,10 +8,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from requests_mock import Mocker
 
-from custom_components.ms365_calendar.integration.const_integration import (
-    CONF_TRACK_NEW_CALENDAR,
-    MAX_CALENDARS,
-)
+from custom_components.ms365_calendar.integration.const_integration import CONF_TRACK_NEW_CALENDAR
 
 from ..helpers.mock_config_entry import MS365MockConfigEntry
 from ..helpers.utils import load_json, mock_call
@@ -155,12 +152,12 @@ async def test_calendar_limit_reached(
 ) -> None:
     """Test no calendars are deleted when the scan returns the most it reads."""
     MS365MOCKS.standard_mocks(requests_mock)
-    # calendar3 is past the first 50 calendars
+    # 50 calendars, the most that are read; calendar3 is not among them
     data = json.loads(load_json("O365/calendars.json"))
     first = data["value"][0]
     data["value"] = [first] + [
         {**first, "id": f"calendar{number}", "name": f"Calendar{number}"}
-        for number in range(4, 4 + MAX_CALENDARS - 1)
+        for number in range(4, 53)
     ]
     requests_mock.get(URL.CALENDARS.value, json=data)
     yaml_setup(tmp_path, "ms365_calendars_base")
@@ -175,7 +172,7 @@ async def test_calendar_limit_reached(
 
     calendar_ids = [calendar["cal_id"] for calendar in read_yaml_file(tmp_path)]
     assert "calendar3" in calendar_ids
-    assert len(calendar_ids) == 2 + MAX_CALENDARS
+    assert len(calendar_ids) == 52
     assert "Calendar deleted from" not in caplog.text
 
 
