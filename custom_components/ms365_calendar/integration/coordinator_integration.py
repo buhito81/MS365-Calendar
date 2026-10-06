@@ -9,6 +9,7 @@ from requests.exceptions import (
     ConnectionError as RequestConnectionError,
     HTTPError,
     RetryError,
+    Timeout,
 )
 
 from homeassistant.config_entries import ConfigEntry
@@ -101,7 +102,7 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             self.sync_state = STATE_OK
             # The token works again, such as after a reconfigure
             ir.async_delete_issue(self.hass, DOMAIN, self._token_issue_id)
-        except (HTTPError, RetryError, RequestConnectionError) as err:
+        except (HTTPError, RetryError, RequestConnectionError, Timeout) as err:
             _LOGGER.error(
                 "Error syncing calendar events from MS Graph, fetching from cache: %s",
                 err,
@@ -137,7 +138,7 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             )
             try:
                 return await self.sync.async_list_events(start_date, end_date)
-            except (HTTPError, RetryError, RequestConnectionError) as err:
+            except (HTTPError, RetryError, RequestConnectionError, Timeout) as err:
                 self._log_error(
                     "Error getting calendar event range "
                     "from MS Graph, fetching from cache.",

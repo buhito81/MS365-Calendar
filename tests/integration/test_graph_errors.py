@@ -1,6 +1,7 @@
 # pylint: disable=unused-argument,line-too-long
 """Test the calendar's handling of MS Graph and token errors."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +11,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 from requests.exceptions import ConnectionError as RequestConnectionError, RetryError
 from requests_mock import Mocker
 
@@ -19,6 +21,7 @@ from ..helpers.refresh import (
     REFRESH_UNAVAILABLE,
     expire_access_token,
     mock_refresh_failure,
+    mock_refresh_timeout,
     refresh_unavailable,
 )
 from ..helpers.utils import check_entity_state, mock_call
@@ -184,6 +187,58 @@ async def test_token_refresh_unavailable(
     # A range outside the synced one also comes from the cache
     assert result["calendar.test_calendar1"]["events"] == []
     assert f"Unable to refresh the token, fetching from cache. - {error}" in caplog.text
+    assert not issue_registry.issues
+
+
+async def test_token_refresh_timeout(
+    tmp_path,
+    hass: HomeAssistant,
+    setup_base_integration,
+    base_config_entry: MS365MockConfigEntry,
+    requests_mock: Mocker,
+    issue_registry: ir.IssueRegistry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test a token refresh that times out uses the cache, as a connection error does."""
+    coordinator = _coordinator(base_config_entry, "calendar1")
+    cached_events = hass.states.get("calendar.test_calendar1").attributes["data"]
+    assert len(cached_events) == 2
+    await _async_expire_token(hass, tmp_path, base_config_entry)
+    requests_mock.get(CALENDAR1_VIEW, status_code=401)
+    mock_refresh_timeout(requests_mock)
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    check_entity_state(
+        hass,
+        "calendar.test_calendar1",
+        "on",
+        attributes={"sync_state": "problem", "data": cached_events},
+    )
+    assert (
+        "Error syncing calendar events from MS Graph, fetching from cache: "
+        "Read timed out"
+    ) in caplog.text
+    assert "Timeout fetching" not in caplog.text
+
+    # A range reaching beyond the synced one also comes from the cache
+    now = dt_util.utcnow()
+    result = await _async_get_events(
+        hass,
+        (now - timedelta(days=60)).isoformat(),
+        (now + timedelta(days=60)).isoformat(),
+    )
+
+    events = result["calendar.test_calendar1"]["events"]
+    assert sorted(event["summary"] for event in events) == [
+        "Test event 1 calendar1",
+        "Test event 2 calendar1",
+    ]
+    assert (
+        "Error getting calendar event range from MS Graph, fetching from cache. - "
+        "Read timed out"
+    ) in caplog.text
     assert not issue_registry.issues
 
 
@@ -373,15 +428,19 @@ async def _async_remove_event1(hass: HomeAssistant):
     )
 
 
-async def _async_get_events(hass: HomeAssistant):
+async def _async_get_events(
+    hass: HomeAssistant,
+    start="2022-03-22T20:00:00.000Z",
+    end="2022-03-22T22:00:00.000Z",
+):
     """Get events outside the synced range, so they are fetched from MS Graph."""
     return await hass.services.async_call(
         CALENDAR_DOMAIN,
         SERVICE_GET_EVENTS,
         {
             "entity_id": "calendar.test_calendar1",
-            "start_date_time": "2022-03-22T20:00:00.000Z",
-            "end_date_time": "2022-03-22T22:00:00.000Z",
+            "start_date_time": start,
+            "end_date_time": end,
         },
         blocking=True,
         return_response=True,

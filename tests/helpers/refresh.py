@@ -6,6 +6,7 @@ import time
 from unittest.mock import patch
 
 from portalocker.exceptions import LockException
+from requests.exceptions import ReadTimeout
 
 from ..const import ENTITY_NAME, TOKEN_LOCATION
 from ..integration.const_integration import DOMAIN
@@ -71,6 +72,11 @@ def mock_refresh_failure(requests_mock, error, status_code=400):
             ],
         },
     )
+
+
+def mock_refresh_timeout(requests_mock):
+    """Make the login service take too long to refresh the token."""
+    requests_mock.post(TOKEN_URL, exc=ReadTimeout("Read timed out"))
 
 
 @contextmanager
