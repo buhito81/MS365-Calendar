@@ -249,7 +249,11 @@ class MS365ConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         if url[:5].lower() == "http:":
             url = f"https:{url[5:]}"
-        query = parse_qs(urlparse(url).query)
+        try:
+            query = parse_qs(urlparse(url).query)
+        except ValueError as err:
+            _LOGGER.warning(ERROR_INVALID_URL, err)
+            query = {}
         if "code" not in query and "error" not in query:
             errors[error_key] = "invalid_url"
             return errors

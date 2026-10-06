@@ -817,3 +817,47 @@ async def test_unusable_returned_url(
         user_input={"url": token_url},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_malformed_returned_url(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    setup_base_integration,
+    base_config_entry: MS365MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test a returned url that cannot be parsed shows the invalid url error."""
+    mock_token(requests_mock, BASE_TOKEN_PERMS)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": base_config_entry.entry_id,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input=RECONFIGURE_CONFIG_ENTRY,
+    )
+    assert result["step_id"] == "request_default"
+    token_url = build_token_url(result, AUTH_CALLBACK_PATH_DEFAULT)
+
+    # The unmatched bracket in the host makes the url impossible to parse
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={"url": build_token_url(result, "https://[::1/")},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "request_default"
+    assert result["errors"] == {"url": "invalid_url"}
+    assert "Invalid IPv6 URL" in caplog.text
+    assert _token_file(tmp_path).is_file()
+    assert base_config_entry.state is ConfigEntryState.LOADED
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={"url": token_url},
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
