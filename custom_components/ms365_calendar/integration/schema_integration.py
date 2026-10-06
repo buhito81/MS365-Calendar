@@ -15,6 +15,7 @@ from O365.calendar import (  # pylint: disable=no-name-in-module
     EventSensitivity,
     EventShowAs,
 )
+from O365.utils import to_snake_case  # pylint: disable=no-name-in-module
 
 from ..const import CONF_ENABLE_UPDATE, CONF_SHARED_MAILBOX
 from .const_integration import (
@@ -86,6 +87,20 @@ def _as_local_timezone(*keys: Any) -> Callable[[dict[str, Any]], dict[str, Any]]
     return validate
 
 
+def _snake_case_values(*keys: Any) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Convert values to snake case, so enum names such as Busy are accepted."""
+
+    def validate(obj: dict[str, Any]) -> dict[str, Any]:
+        """Convert all keys that are strings to snake case."""
+        obj = dict(obj)
+        for k in keys:
+            if isinstance(value := obj.get(k), str):
+                obj[k] = to_snake_case(value)
+        return obj
+
+    return validate
+
+
 CONFIG_SCHEMA_INTEGRATION = {
     vol.Optional(CONF_ENABLE_UPDATE, default=False): cv.boolean,
     vol.Optional(CONF_BASIC_CALENDAR, default=False): cv.boolean,
@@ -108,6 +123,7 @@ CALENDAR_SERVICE_ATTENDEE_SCHEMA = vol.Schema(
 )
 
 CALENDAR_SERVICE_CREATE_SCHEMA = vol.All(
+    _snake_case_values(ATTR_SENSITIVITY, ATTR_SHOW_AS),
     cv.make_entity_service_schema(
         {
             vol.Required(ATTR_SUBJECT): cv.string,
@@ -133,6 +149,7 @@ CALENDAR_SERVICE_CREATE_SCHEMA = vol.All(
 )
 
 CALENDAR_SERVICE_MODIFY_SCHEMA = vol.All(
+    _snake_case_values(ATTR_SENSITIVITY, ATTR_SHOW_AS),
     cv.make_entity_service_schema(
         {
             vol.Required(ATTR_EVENT_ID): cv.string,
