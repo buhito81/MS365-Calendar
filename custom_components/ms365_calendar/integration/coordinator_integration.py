@@ -137,11 +137,6 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             try:
                 return await self._async_list_range(start_date, end_date)
             except (HTTPError, RetryError, RequestConnectionError) as err:
-                # The synced data has nothing for this range, so it cannot stand in
-                if end_date <= self._last_sync_min or start_date >= self._last_sync_max:
-                    raise HomeAssistantError(
-                        f"Unable to get events from MS Graph: {err}"
-                    ) from err
                 self._log_error(
                     "Error getting calendar event range "
                     "from MS Graph, fetching from cache.",
@@ -168,7 +163,9 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         self._range_cache = {
             key: value for key, value in self._range_cache.items() if now < value[0]
         }
-        self._range_cache[(start_date, end_date)] = (now + RANGE_CACHE_TIME, events)
+        # Keep it at least until just after the next update writes the state again
+        keep = max(RANGE_CACHE_TIME, self.update_interval + timedelta(minutes=1))
+        self._range_cache[(start_date, end_date)] = (now + keep, events)
         return events
 
     def get_current_event(self):

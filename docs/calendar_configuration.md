@@ -50,7 +50,7 @@ Key | Type | Required | Description
 `exclude` | `list[string/regex]` | `False` | Exclude events where the subject contains any one of items in the list of strings
 `start_offset` | `integer` | `False` | Number of hours to offset the start time to search for events for (negative numbers to offset into the past).
 `end_offset` | `integer` | `False` | Number of hours to offset the end time to search for events for (negative numbers to offset into the past).
-`max_results` | `integer` | `False` | Max number of events to retrieve. Default is 999.
+`max_results` | `integer` | `False` | Max number of events in the `data` attribute. Default is no limit.
 `sensitivity_exclude` | `list[string]` | `False` | List of sensitivities to exclude from the calendar (`normal`/`personal`/`private`/`confidential`)
 
 ## Group calendars
@@ -78,7 +78,7 @@ To exclude calendar items from being displayed, the exclude attribute can be use
 
 ```yaml
     exclude:
-     - "Cancelled"
+     - "^Private"
      - "^In.*Junk$"
 ```
 

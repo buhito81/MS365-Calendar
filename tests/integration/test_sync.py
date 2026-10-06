@@ -3,6 +3,7 @@
 
 import json
 import logging
+import threading
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -12,11 +13,15 @@ from homeassistant.components.calendar import DOMAIN as CALENDAR_DOMAIN
 from homeassistant.components.calendar import SERVICE_GET_EVENTS
 from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE, EVENT_STATE_CHANGED
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from requests.exceptions import HTTPError
 from requests_mock import Mocker
+
+from custom_components.ms365_calendar.integration.const_integration import (
+    CONF_ADVANCED_OPTIONS,
+    CONF_UPDATE_INTERVAL,
+)
 
 from ..helpers.mock_config_entry import MS365MockConfigEntry
 from ..helpers.utils import check_entity_state, load_json, mock_call, utcnow
@@ -100,6 +105,36 @@ async def test_next_event_when_event_ends(
     assert calendar_view.call_count == syncs
 
 
+async def test_untitled_current_event(
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+) -> None:
+    """Test the calendar is added with its events when the current one has no title."""
+    now = dt_util.utcnow().replace(microsecond=0)
+    MS365MOCKS.no_events_mocks(requests_mock)
+    data = json.loads(
+        _calendar_view(
+            "calendar1_calendar_view_back_to_back",
+            [
+                (now - timedelta(minutes=30), now + timedelta(minutes=30)),
+                (now + timedelta(hours=1), now + timedelta(hours=2)),
+            ],
+        )
+    )
+    # Graph sends a null subject for an event without a title
+    data["value"][0]["subject"] = None
+    requests_mock.get(CALENDAR1_VIEW, text=json.dumps(data))
+    base_config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(CALENDAR1)
+    assert state is not None
+    assert [item["uid"] for item in state.attributes["data"]] == ["first", "second"]
+
+
 async def test_cancelled_meeting_left_out(
     hass: HomeAssistant,
     requests_mock: Mocker,
@@ -166,13 +201,18 @@ async def test_events_on_every_page(
         "calendar1/calendarView",
         **dates,
     )
-    mock_call(
-        requests_mock,
-        URL.CALENDARS,
-        "calendar1_calendar_view_page2",
-        "calendar1/calendarView?$skip=999",
-        **dates,
-    )
+    loop_thread = threading.get_ident()
+    page2_threads = []
+
+    def _page2(request, context):
+        page2_threads.append(threading.get_ident())
+        return (
+            load_json("O365/calendar1_calendar_view_page2.json")
+            .replace("2020-01-01", dates["start"])
+            .replace("2020-01-02", dates["end"])
+        )
+
+    requests_mock.get(f"{CALENDAR1_VIEW}?$skip=999", text=_page2)
     base_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -185,6 +225,10 @@ async def test_events_on_every_page(
         "Test event page 1",
         "Test event page 2",
     ]
+
+    # The later pages are read in the executor, not in the event loop
+    assert len(page2_threads) == 2
+    assert loop_thread not in page2_threads
 
 
 async def test_range_outside_window_kept(
@@ -200,6 +244,15 @@ async def test_range_outside_window_kept(
     assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
     assert _range_fetches(requests_mock, "2022-03-22") == 1
 
+    # A scheduled update keeps it
+    synced = _window_fetches(requests_mock)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert _window_fetches(requests_mock) > synced
+    assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
+    assert _range_fetches(requests_mock, "2022-03-22") == 1
+
     # Past the five minutes it is kept for, it is fetched again
     freezer.tick(timedelta(minutes=6))
     assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
@@ -211,16 +264,28 @@ async def test_range_outside_window_kept(
     assert _range_fetches(requests_mock, "2022-03-22") == 3
 
 
-async def test_range_outside_window_error(
+@pytest.mark.parametrize(
+    "base_config_entry",
+    [{"options": {CONF_ADVANCED_OPTIONS: {CONF_UPDATE_INTERVAL: 600}}}],
+    indirect=True,
+)
+async def test_range_kept_past_long_update_interval(
     hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
     setup_base_integration,
+    requests_mock: Mocker,
 ) -> None:
-    """Test a failed fetch of a range the synced window does not cover is an error."""
-    with (
-        patch("O365.calendar.Calendar.get_events", side_effect=HTTPError()),
-        pytest.raises(HomeAssistantError, match="Unable to get events from MS Graph"),
-    ):
-        await _get_events(hass, OUTSIDE_START, OUTSIDE_END)
+    """Test a range is kept past the next update when updates are far apart."""
+    first = await _get_events(hass, OUTSIDE_START, OUTSIDE_END)
+    assert len(first) == 2
+
+    synced = _window_fetches(requests_mock)
+    freezer.tick(timedelta(seconds=601))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert _window_fetches(requests_mock) > synced
+    assert await _get_events(hass, OUTSIDE_START, OUTSIDE_END) == first
+    assert _range_fetches(requests_mock, "2022-03-22") == 1
 
 
 async def test_range_error_logged_again_after_recovery(
@@ -350,6 +415,17 @@ def _range_fetches(requests_mock: Mocker, day):
             request
             for request in requests_mock.request_history
             if "calendarview" in request.url.lower() and day in request.url
+        ]
+    )
+
+
+def _window_fetches(requests_mock: Mocker):
+    """Count the calendar view requests for the synced window."""
+    return len(
+        [
+            request
+            for request in requests_mock.request_history
+            if "calendarview" in request.url.lower() and "2022-03-22" not in request.url
         ]
     )
 

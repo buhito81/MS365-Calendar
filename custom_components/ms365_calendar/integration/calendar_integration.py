@@ -295,7 +295,9 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
             self._event = None
             return
 
-        self._event = deepcopy(self._build_calendar_event(vevent))
+        # An event that cannot be built is left out, as in the event list
+        events = self._build_calendar_events([vevent])
+        self._event = deepcopy(events[0]) if events else None
 
     def _build_extra_attributes(self, range_start, range_end):
         if self.coordinator.data is not None:
