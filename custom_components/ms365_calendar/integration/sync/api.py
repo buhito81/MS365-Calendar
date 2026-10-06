@@ -4,9 +4,15 @@ import functools as ft
 import logging
 from typing import Any, cast
 
-from requests.exceptions import HTTPError, RetryError
+from requests.exceptions import (
+    ConnectionError as RequestConnectionError,
+    HTTPError,
+    RetryError,
+    Timeout,
+)
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from O365.calendar import Event  # pylint: disable=no-name-in-module
 from O365.utils.query import (  # pylint: disable=no-name-in-module, import-error
     QueryBuilder,
@@ -16,6 +22,7 @@ from ...classes.config_entry import MS365ConfigEntry
 from ..const_integration import (
     CONF_TRACK_NEW_CALENDAR,
     CONST_GROUP,
+    DOMAIN,
     ITEMS,
     EventResponse,
 )
@@ -76,7 +83,8 @@ class MS365CalendarService:
                 )
             )
 
-        except (HTTPError, RetryError, ConnectionError) as err:
+        except HTTPError as err:
+            # Connection errors are not caught here, so that the setup is retried
             _LOGGER.warning(
                 "Error getting calendar - %s - %s - %s Has the calendar been deleted? "
                 "If so, disable or delete in calendars.yaml",
@@ -90,7 +98,9 @@ class MS365CalendarService:
 
     async def async_get_event(self, event_id: str) -> Event:
         """Get specific event."""
-        return await self.hass.async_add_executor_job(self.calendar.get_event, event_id)
+        return await self._async_call(
+            self.calendar.get_event, event_id, event_id=event_id
+        )
 
     async def async_list_events(self, start_date, end_date):
         """Get the events for the calendar."""
@@ -140,14 +150,14 @@ class MS365CalendarService:
         """Add a new event to calendar."""
         event = self.calendar.new_event()
         event = add_call_data_to_event(event, subject, start, end, **kwargs)
-        await self.hass.async_add_executor_job(event.save)
+        await self._async_call(event.save)
         return event
 
     async def async_patch_event(self, event_id, subject, start, end, **kwargs) -> None:
         """Update an event using patch semantics, with raw API data."""
         event = await self.async_get_event(event_id)
         event = add_call_data_to_event(event, subject, start, end, **kwargs)
-        await self.hass.async_add_executor_job(event.save)
+        await self._async_call(event.save, event_id=event_id)
 
     async def async_delete_event(
         self,
@@ -155,30 +165,63 @@ class MS365CalendarService:
     ) -> None:
         """Delete an event on the specified calendar."""
         event = await self.async_get_event(event_id)
-        await self.hass.async_add_executor_job(event.delete)
+        await self._async_call(event.delete, event_id=event_id)
 
     async def async_send_response(self, event_id, response, send_response, message):
         """Respond to calendar event."""
         event = await self.async_get_event(event_id)
         if response == EventResponse.Accept:
-            await self.hass.async_add_executor_job(
-                ft.partial(event.accept_event, message, send_response=send_response)
+            await self._async_call(
+                event.accept_event,
+                message,
+                send_response=send_response,
+                event_id=event_id,
             )
 
         elif response == EventResponse.Tentative:
-            await self.hass.async_add_executor_job(
-                ft.partial(
-                    event.accept_event,
-                    message,
-                    tentatively=True,
-                    send_response=send_response,
-                )
+            await self._async_call(
+                event.accept_event,
+                message,
+                tentatively=True,
+                send_response=send_response,
+                event_id=event_id,
             )
 
         elif response == EventResponse.Decline:
-            await self.hass.async_add_executor_job(
-                ft.partial(event.decline_event, message, send_response=send_response)
+            await self._async_call(
+                event.decline_event,
+                message,
+                send_response=send_response,
+                event_id=event_id,
             )
+
+    async def _async_call(self, func, *args, event_id=None, **kwargs):
+        """Call MS Graph, turning a failed request into an error HA can show."""
+        try:
+            return await self.hass.async_add_executor_job(
+                ft.partial(func, *args, **kwargs)
+            )
+        except HTTPError as err:
+            if event_id and getattr(err.response, "status_code", None) == 404:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="event_not_found",
+                    translation_placeholders={
+                        "event_id": event_id,
+                        "entity_id": self._entity_id,
+                    },
+                ) from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="request_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
+        except (RequestConnectionError, RetryError, Timeout) as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="connection_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
 
 class MS365CalendarEventStoreService:

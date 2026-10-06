@@ -14,10 +14,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OK, STATE_PROBLEM, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.network import get_url
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from O365.calendar import Event  # pylint: disable=no-name-in-module)
 
+from ..const import CONF_ENTITY_NAME, TOKEN_FILE_EXPIRED
 from .const_integration import (
     CONF_ADVANCED_OPTIONS,
     CONF_DAYS_BACKWARD,
@@ -28,12 +31,18 @@ from .const_integration import (
     DEFAULT_DAYS_BACKWARD,
     DEFAULT_DAYS_FORWARD,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
 )
 from .sync.sync import MS365CalendarEventSyncManager
 from .sync.timeline import MS365Timeline
 from .utils_integration import get_end_date, get_start_date
 
 _LOGGER = logging.getLogger(__name__)
+# O365 errors for a token that can no longer be refreshed
+TOKEN_REFRESH_FAILED = (
+    "Refresh token operation failed: invalid_grant",
+    "Refresh token operation failed: invalid_client",
+)
 # Maximum number of upcoming events to consider for state changes between
 # coordinator updates.
 # MAX_UPCOMING_EVENTS = 20
@@ -99,6 +108,11 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
                 err,
             )
             self.sync_state = STATE_PROBLEM
+        except RuntimeError as err:
+            if not self._async_token_issue(err):
+                raise
+            _LOGGER.error("Unable to refresh the token, fetching from cache: %s", err)
+            self.sync_state = STATE_PROBLEM
 
         return await self.sync.store_service.async_get_timeline(
             dt_util.get_default_time_zone()
@@ -129,6 +143,12 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
                     "Error getting calendar event range "
                     "from MS Graph, fetching from cache.",
                     err,
+                )
+            except RuntimeError as err:
+                if not self._async_token_issue(err):
+                    raise
+                self._log_error(
+                    "Unable to refresh the token, fetching from cache.", err
                 )
         _LOGGER.debug(
             "Fetch events from cache - %s - %s - %s",
@@ -236,3 +256,22 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             self._error = True
         else:
             _LOGGER.debug("Repeat error - %s - %s", error, err)
+
+    def _async_token_issue(self, err: RuntimeError) -> bool:
+        """Raise the same repair issue as setup when the token cannot be refreshed."""
+        if not str(err).startswith(TOKEN_REFRESH_FAILED):
+            return False
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            TOKEN_FILE_EXPIRED,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=TOKEN_FILE_EXPIRED,
+            translation_placeholders={
+                "domain": DOMAIN,
+                "url": f"{get_url(self.hass)}/config/integrations/integration/{DOMAIN}",
+                CONF_ENTITY_NAME: self.config_entry.data.get(CONF_ENTITY_NAME),
+            },
+        )
+        return True

@@ -3,8 +3,14 @@
 import logging
 
 from oauthlib.oauth2.rfc6749.errors import InvalidClientError
+from requests.exceptions import (
+    ConnectionError as RequestConnectionError,
+    RetryError,
+    Timeout,
+)
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.network import get_url
 
@@ -57,7 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MS365ConfigEntry):
         _LOGGER.debug("Do setup")
         check_token = await _async_check_token(hass, ha_account.account, entity_name)
         if check_token:
-            coordinator, sensors, platforms = await setup_integration.async_do_setup(
+            coordinator, sensors, platforms = await _async_do_setup(
                 hass, entry, ha_account.account
             )
             entry.runtime_data = MS365Data(
@@ -163,6 +169,28 @@ async def _async_check_token(hass: HomeAssistant, account, entity_name):
         if "Refresh token operation failed: invalid_grant" in str(err):
             _LOGGER.warning(TOKEN_EXPIRED, entity_name)
             return False
+        # O365 2.x refreshes through MSAL, which reports an expired secret this way
+        if "Refresh token operation failed: invalid_client" in str(err):
+            _LOGGER.warning(SECRET_EXPIRED, entity_name)
+            return False
         raise
+    except (RequestConnectionError, RetryError, Timeout) as err:
+        raise _not_ready(err) from err
 
     return True
+
+
+async def _async_do_setup(hass: HomeAssistant, entry: MS365ConfigEntry, account):
+    try:
+        return await setup_integration.async_do_setup(hass, entry, account)
+    except (RequestConnectionError, RetryError, Timeout) as err:
+        raise _not_ready(err) from err
+
+
+def _not_ready(err):
+    """Have HA retry the setup later, as MS Graph could not be reached."""
+    return ConfigEntryNotReady(
+        translation_domain=DOMAIN,
+        translation_key="connection_failed",
+        translation_placeholders={"error": str(err)},
+    )

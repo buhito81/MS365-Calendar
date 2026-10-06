@@ -16,6 +16,7 @@ from O365.connection import (  # pylint: disable=import-error, no-name-in-module
 
 from ..const import (
     CONF_ENTITY_NAME,
+    CONST_REQUEST_TIMEOUT,
     CONST_UTC_TIMEZONE,
     COUNTRY_URLS,
     DEFAULT_TENANT_ID,
@@ -102,6 +103,7 @@ class MS365Account:
                 token_backend=self._perms.ha_token_backend.token_backend,
                 timezone=CONST_UTC_TIMEZONE,
                 main_resource=main_resource,
+                timeout=CONST_REQUEST_TIMEOUT,
             )
             self.is_authenticated = self.account.is_authenticated
 
@@ -193,7 +195,7 @@ class MS365LockableFileSystemTokenBackend(FileSystemTokenBackend):
 
     def should_refresh_token(
         self, con: Connection | None = None, *, username: str | None = None
-    ):  # pragma: no cover
+    ):
         """Check if token needs refreshing.
 
         When there are concurrently running  O365 instances.
@@ -281,8 +283,8 @@ class MS365LockableFileSystemTokenBackend(FileSystemTokenBackend):
                     # Return False so the connection can update the token access from the
                     # backend into the session
                     return False
-
-            return None
+            else:
+                return None
         # if we exit the loop, that means we were locked out of the file after
         # multiple retries give up and throw an error - something isn't right
         raise RuntimeError(f"Could not access locked token file after {self.max_tries}")

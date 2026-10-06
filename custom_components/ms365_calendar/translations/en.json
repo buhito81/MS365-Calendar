@@ -118,6 +118,15 @@
     }
   },
   "exceptions": {
+    "connection_failed": {
+      "message": "Unable to connect to MS Graph: {error}"
+    },
+    "event_not_found": {
+      "message": "Event {event_id} was not found in {entity_id}"
+    },
+    "request_failed": {
+      "message": "MS Graph returned an error: {error}"
+    },
     "calendar_not_editable": {
       "message": "Calendar - {name} - is not editable"
     },

@@ -24,6 +24,7 @@ CONF_FAILED_PERMISSIONS = "failed_permissions"
 CONF_SHARED_MAILBOX = "shared_mailbox"
 CONF_URL = "url"
 
+CONST_REQUEST_TIMEOUT = 30
 CONST_UTC_TIMEZONE = "UTC"
 
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
