@@ -96,20 +96,15 @@ async def _async_setup_coordinators(
     # Events are kept in memory now, so remove the file an older version wrote
     await local_store.async_remove()
 
+    scanned = {calendar.calendar_id: calendar for calendar in scanned_calendars}
     coordinators = []
     keys = []
     for cal_id, calendar in calendars.items():
+        scanned_calendar = scanned.get(cal_id)
         for entity in calendar.get(CONF_ENTITIES):
             if not entity[CONF_TRACK]:
                 continue
-            can_edit = next(
-                (
-                    scanned_calendar.can_edit
-                    for scanned_calendar in scanned_calendars
-                    if scanned_calendar.calendar_id == cal_id
-                ),
-                True,
-            )
+            can_edit = True if scanned_calendar is None else scanned_calendar.can_edit
             entity_id = build_calendar_entity_id(
                 entity.get(CONF_DEVICE_ID), entry.data[CONF_ENTITY_NAME]
             )
@@ -130,7 +125,7 @@ async def _async_setup_coordinators(
                     entity.get(CONF_SEARCH),
                     entity_id,
                 )
-                if await api.async_calendar_init():
+                if await api.async_calendar_init(scanned_calendar):
                     unique_id = f"{entity.get(CONF_NAME)}"
                     sync_manager = MS365CalendarEventSyncManager(
                         api,

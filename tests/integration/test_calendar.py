@@ -147,14 +147,17 @@ async def test_get_events_fetch_error(
 
 
 async def test_get_calendar_error(
+    tmp_path,
     hass: HomeAssistant,
     requests_mock: Mocker,
     base_token,
     caplog: pytest.LogCaptureFixture,
     base_config_entry: MS365MockConfigEntry,
 ) -> None:
-    """Test error when getting calendar."""
+    """Test error when getting a calendar, which is only read when the scan is empty."""
     MS365MOCKS.standard_mocks(requests_mock)
+    mock_call(requests_mock, URL.CALENDARS, "calendars_none")
+    yaml_setup(tmp_path, "ms365_calendars_base")
 
     base_config_entry.add_to_hass(hass)
     with patch(

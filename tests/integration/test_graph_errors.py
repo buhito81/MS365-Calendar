@@ -28,6 +28,7 @@ from ..helpers.utils import check_entity_state, mock_call
 from .const_integration import DOMAIN, URL
 from .fixtures import ClientFixture
 from .helpers_integration.mocks import MS365MOCKS
+from .helpers_integration.utils_integration import yaml_setup
 
 CALENDAR1_VIEW = f"{URL.CALENDARS.value}/calendar1/calendarView"
 # Refusals of the login service that need the user to sign in again
@@ -56,6 +57,7 @@ async def test_setup_retry_calendar_list(
 
 @pytest.mark.parametrize("error", [RequestConnectionError, RetryError])
 async def test_setup_retry_calendar_get(
+    tmp_path,
     hass: HomeAssistant,
     requests_mock: Mocker,
     base_token,
@@ -63,15 +65,63 @@ async def test_setup_retry_calendar_get(
     caplog: pytest.LogCaptureFixture,
     error,
 ) -> None:
-    """Test setup is retried, not the calendar dropped, when it cannot be fetched."""
+    """Test setup is retried when the scan is empty and a calendar cannot be read."""
     MS365MOCKS.standard_mocks(requests_mock)
+    # Every account has a calendar, so the scan did not work either
+    mock_call(requests_mock, URL.CALENDARS, "calendars_none")
     requests_mock.get(f"{URL.CALENDARS.value}/calendar1", exc=error("Connection reset"))
+    yaml_setup(tmp_path, "ms365_calendars_base")
     base_config_entry.add_to_hass(hass)
 
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
 
     assert base_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert "Has the calendar been deleted?" not in caplog.text
+
+
+@pytest.mark.parametrize("error", [RequestConnectionError, RetryError])
+async def test_setup_with_scanned_calendars(
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+    error,
+) -> None:
+    """Test a calendar the scan found is not read again, so its errors do not count.
+
+    Such as a calendar a colleague shares, whose mailbox MS Graph cannot reach for
+    a while, which must not stop the other calendars or drop that one.
+    """
+    MS365MOCKS.standard_mocks(requests_mock)
+    calendar_urls = [
+        f"{URL.CALENDARS.value}/{cal_id}" for cal_id in ("calendar1", "calendar3")
+    ]
+    for url in calendar_urls:
+        requests_mock.get(url, exc=error("Max retries exceeded"))
+    base_config_entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert base_config_entry.state is ConfigEntryState.LOADED
+    state = hass.states.get("calendar.test_calendar1")
+    assert [event["summary"] for event in state.attributes["data"]] == [
+        "Test event 1 calendar1",
+        "Test event 2 calendar1",
+    ]
+    # The colour is the one in the scan
+    assert state.attributes["hex_color"] == "#cf2b36"
+    state = hass.states.get("calendar.test_calendar3")
+    assert [event["summary"] for event in state.attributes["data"]] == [
+        "Test event 1 calendar3"
+    ]
+    assert not [
+        request.url
+        for request in requests_mock.request_history
+        if request.url.split("?")[0] in calendar_urls
+    ]
     assert "Has the calendar been deleted?" not in caplog.text
 
 

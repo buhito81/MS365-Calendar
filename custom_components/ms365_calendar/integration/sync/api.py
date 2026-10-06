@@ -67,8 +67,8 @@ class MS365CalendarService:
         self._builder = QueryBuilder(protocol=account.protocol)
         self._entity_id = entity_id
 
-    async def async_calendar_init(self):
-        """Async init of calendar data."""
+    async def async_calendar_init(self, scanned_calendar=None):
+        """Async init of calendar data, using the calendar the scan found if any."""
 
         if self.group_calendar:
             self.calendar = await self.hass.async_add_executor_job(
@@ -89,13 +89,20 @@ class MS365CalendarService:
                     err,
                 )
                 return False
-            except RetryError as err:
-                # MS Graph is busy or failing, so keep the calendar for the next poll
+            except (RetryError, RequestConnectionError, Timeout) as err:
+                # MS Graph is busy, failing or slow, so keep the calendar for the next
+                # poll, as an ordinary calendar is kept once the scan has worked
                 _LOGGER.debug(
                     "Group calendar check failed - %s - %s", self.calendar_id, err
                 )
             return True
 
+        if scanned_calendar is not None:
+            # The scan read the calendar already, so a busy MS Graph cannot stop it
+            self.calendar = scanned_calendar
+            return True
+
+        # The scan found no calendars, so read this one on its own
         schedule = await self.hass.async_add_executor_job(self._account.schedule)
         query = self._builder.select("name", "id", "canEdit", "color", "hexColor")
         try:

@@ -2,7 +2,11 @@
 """Test calendar entity setup and removal."""
 
 import pytest
-from requests.exceptions import RetryError
+from requests.exceptions import (
+    ConnectionError as RequestConnectionError,
+    ReadTimeout,
+    RetryError,
+)
 from requests_mock import Mocker
 
 from homeassistant.components.calendar import (
@@ -18,6 +22,7 @@ from custom_components.ms365_calendar.integration.const_integration import (
 )
 
 from ..helpers.mock_config_entry import MS365MockConfigEntry
+from ..helpers.utils import mock_call
 from .const_integration import DOMAIN, FULL_INIT_ENTITY_NO, URL
 from .helpers_integration.mocks import MS365MOCKS
 from .helpers_integration.utils_integration import update_options, yaml_setup
@@ -79,6 +84,8 @@ async def test_shared_name_calendar_error(
 ) -> None:
     """Test a failed calendar does not show another calendar with the same name."""
     MS365MOCKS.standard_mocks(requests_mock)
+    # The calendars are only read one by one when the scan finds none
+    mock_call(requests_mock, URL.CALENDARS, "calendars_none")
     requests_mock.get(
         f"{URL.CALENDARS.value}/calendar3", status_code=404, json=NOT_FOUND
     )
@@ -220,6 +227,7 @@ async def test_group_calendar_error(
     ]
 
 
+@pytest.mark.parametrize("error", [RetryError, ReadTimeout, RequestConnectionError])
 async def test_group_calendar_busy(
     tmp_path,
     hass: HomeAssistant,
@@ -227,12 +235,13 @@ async def test_group_calendar_busy(
     base_token,
     base_config_entry: MS365MockConfigEntry,
     caplog: pytest.LogCaptureFixture,
+    error,
 ) -> None:
-    """Test a group calendar is kept when MS Graph is busy, not when it is missing."""
+    """Test a group calendar is kept when MS Graph is busy or slow, not when missing."""
     MS365MOCKS.standard_mocks(requests_mock)
     requests_mock.get(
         f"{URL.GROUP_CALENDARS.value}/calendar2/calendar",
-        exc=RetryError("Max retries exceeded"),
+        exc=error("MS Graph did not answer"),
     )
     requests_mock.get(
         f"{URL.GROUP_CALENDARS.value}/calendar4/calendar",
