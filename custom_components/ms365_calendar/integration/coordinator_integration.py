@@ -4,20 +4,26 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 import logging
 
+from msal.exceptions import MsalServiceError
 from requests.exceptions import (
     ConnectionError as RequestConnectionError,
     HTTPError,
     RetryError,
+    Timeout,
 )
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OK, STATE_PROBLEM, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.network import get_url
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from O365.calendar import Event  # pylint: disable=no-name-in-module)
 
+from ..const import CONF_ENTITY_NAME, TOKEN_FILE_EXPIRED
+from ..helpers.utils import token_refresh_refused, token_refresh_unavailable
 from .const_integration import (
     CONF_ADVANCED_OPTIONS,
     CONF_DAYS_BACKWARD,
@@ -28,6 +34,7 @@ from .const_integration import (
     DEFAULT_DAYS_BACKWARD,
     DEFAULT_DAYS_FORWARD,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
 )
 from .sync.sync import MS365CalendarEventSyncManager
 from .sync.timeline import MS365Timeline
@@ -93,11 +100,18 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         try:
             await self.sync.run(self._last_sync_min, self._last_sync_max)
             self.sync_state = STATE_OK
-        except (HTTPError, RetryError, RequestConnectionError) as err:
+            # The token works again, such as after a reconfigure
+            ir.async_delete_issue(self.hass, DOMAIN, self._token_issue_id)
+        except (HTTPError, RetryError, RequestConnectionError, Timeout) as err:
             _LOGGER.error(
                 "Error syncing calendar events from MS Graph, fetching from cache: %s",
                 err,
             )
+            self.sync_state = STATE_PROBLEM
+        except (MsalServiceError, RuntimeError) as err:
+            if not self._async_token_error(err):
+                raise
+            _LOGGER.error("Unable to refresh the token, fetching from cache: %s", err)
             self.sync_state = STATE_PROBLEM
 
         return await self.sync.store_service.async_get_timeline(
@@ -124,11 +138,17 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             )
             try:
                 return await self.sync.async_list_events(start_date, end_date)
-            except (HTTPError, RetryError, RequestConnectionError) as err:
+            except (HTTPError, RetryError, RequestConnectionError, Timeout) as err:
                 self._log_error(
                     "Error getting calendar event range "
                     "from MS Graph, fetching from cache.",
                     err,
+                )
+            except (MsalServiceError, RuntimeError) as err:
+                if not self._async_token_error(err):
+                    raise
+                self._log_error(
+                    "Unable to refresh the token, fetching from cache.", err
                 )
         _LOGGER.debug(
             "Fetch events from cache - %s - %s - %s",
@@ -236,3 +256,26 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
             self._error = True
         else:
             _LOGGER.debug("Repeat error - %s - %s", error, err)
+
+    @property
+    def _token_issue_id(self) -> str:
+        return f"{TOKEN_FILE_EXPIRED}_{self.config_entry.entry_id}"
+
+    def _async_token_error(self, err: Exception) -> bool:
+        """Check for a failed token refresh, and raise the repair issue if needed."""
+        if not token_refresh_refused(err):
+            return token_refresh_unavailable(err)
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._token_issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=TOKEN_FILE_EXPIRED,
+            translation_placeholders={
+                "domain": DOMAIN,
+                "url": f"{get_url(self.hass)}/config/integrations/integration/{DOMAIN}",
+                CONF_ENTITY_NAME: self.config_entry.data.get(CONF_ENTITY_NAME),
+            },
+        )
+        return True

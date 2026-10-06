@@ -2,9 +2,16 @@
 
 import logging
 
+from msal.exceptions import MsalServiceError
 from oauthlib.oauth2.rfc6749.errors import InvalidClientError
+from requests.exceptions import (
+    ConnectionError as RequestConnectionError,
+    RetryError,
+    Timeout,
+)
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.network import get_url
 
@@ -21,8 +28,13 @@ from .const import (
     TOKEN_EXPIRED,
     TOKEN_FILE_EXPIRED,
     TOKEN_FILE_MISSING,
+    TOKEN_REFRESH_SECRET,
 )
-from .helpers.utils import async_delete_token_issues
+from .helpers.utils import (
+    async_delete_token_issues,
+    token_refresh_refused,
+    token_refresh_unavailable,
+)
 from .integration import setup_integration
 from .integration.const_integration import DOMAIN, PLATFORMS
 from .integration.permissions_integration import Permissions
@@ -59,7 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MS365ConfigEntry):
         _LOGGER.debug("Do setup")
         check_token = await _async_check_token(hass, ha_account.account, entity_name)
         if check_token:
-            coordinator, sensors, platforms = await setup_integration.async_do_setup(
+            coordinator, sensors, platforms = await _async_do_setup(
                 hass, entry, ha_account.account
             )
             entry.runtime_data = MS365Data(
@@ -163,9 +175,33 @@ async def _async_check_token(hass: HomeAssistant, account, entity_name):
             _LOGGER.warning(TOKEN_ERROR, entity_name, err.description)
         return False
     except RuntimeError as err:
-        if "Refresh token operation failed: invalid_grant" in str(err):
+        # O365 2.x refreshes through MSAL, which reports an expired secret this way
+        if str(err).startswith(TOKEN_REFRESH_SECRET):
+            _LOGGER.warning(SECRET_EXPIRED, entity_name)
+            return False
+        if token_refresh_refused(err):
             _LOGGER.warning(TOKEN_EXPIRED, entity_name)
             return False
-        raise
+        if not token_refresh_unavailable(err):
+            raise
+        raise _not_ready(err) from err
+    except (MsalServiceError, RequestConnectionError, RetryError, Timeout) as err:
+        raise _not_ready(err) from err
 
     return True
+
+
+async def _async_do_setup(hass: HomeAssistant, entry: MS365ConfigEntry, account):
+    try:
+        return await setup_integration.async_do_setup(hass, entry, account)
+    except (MsalServiceError, RequestConnectionError, RetryError, Timeout) as err:
+        raise _not_ready(err) from err
+
+
+def _not_ready(err):
+    """Have HA retry the setup later, as MS Graph could not be reached."""
+    return ConfigEntryNotReady(
+        translation_domain=DOMAIN,
+        translation_key="connection_failed",
+        translation_placeholders={"error": str(err)},
+    )

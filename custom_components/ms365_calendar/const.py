@@ -25,6 +25,7 @@ CONF_FAILED_PERMISSIONS = "failed_permissions"
 CONF_SHARED_MAILBOX = "shared_mailbox"
 CONF_URL = "url"
 
+CONST_REQUEST_TIMEOUT = 30
 CONST_UTC_TIMEZONE = "UTC"
 
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
@@ -85,7 +86,15 @@ TOKEN_FILE_EXPIRED = "expired"
 TOKEN_FILE_MISSING = "missing"
 TOKEN_FILE_OUTDATED = "outdated"
 TOKEN_FILE_PERMISSIONS = "permissions"
+# The token file stayed locked by another refresh, so try again later
+TOKEN_FILE_LOCKED = "Could not access locked token file"
 TOKEN_INVALID = "The token you are trying to load is not valid anymore"
+# O365 error when the login service refuses to refresh the token
+TOKEN_REFRESH_FAILED = "Refresh token operation failed: "
+# The login service is too busy to refresh the token, so try again later
+TOKEN_REFRESH_BUSY = f"{TOKEN_REFRESH_FAILED}temporarily_unavailable"
+# MSAL reports an expired client secret this way
+TOKEN_REFRESH_SECRET = f"{TOKEN_REFRESH_FAILED}invalid_client"
 
 
 class CountryOptions(StrEnum):

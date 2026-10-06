@@ -1,5 +1,7 @@
 """Utilities processes."""
 
+from msal.exceptions import MsalServiceError
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity import async_generate_entity_id
@@ -11,9 +13,12 @@ from ..const import (
     DEFAULT_TENANT_ID,
     TOKEN_FILE_CORRUPTED,
     TOKEN_FILE_EXPIRED,
+    TOKEN_FILE_LOCKED,
     TOKEN_FILE_MISSING,
     TOKEN_FILE_OUTDATED,
     TOKEN_FILE_PERMISSIONS,
+    TOKEN_REFRESH_BUSY,
+    TOKEN_REFRESH_FAILED,
     CountryOptions,
 )
 from ..integration.const_integration import DOMAIN
@@ -63,3 +68,23 @@ def get_tenant_id(entry_data):
         if tid.strip():
             return tid.strip()
     return DEFAULT_TENANT_ID
+
+
+def token_refresh_refused(err: Exception) -> bool:
+    """Check for a token that the login service will no longer refresh.
+
+    A busy login service may refresh it later. Any other refusal, such as
+    invalid_grant or interaction_required, needs the user to sign in again.
+    """
+    message = str(err)
+    return message.startswith(TOKEN_REFRESH_FAILED) and not message.startswith(
+        TOKEN_REFRESH_BUSY
+    )
+
+
+def token_refresh_unavailable(err: Exception) -> bool:
+    """Check for a token refresh that can work when tried again later."""
+    # The login service failed or is busy, or another refresh kept the token file locked
+    return isinstance(err, MsalServiceError) or str(err).startswith(
+        (TOKEN_REFRESH_BUSY, TOKEN_FILE_LOCKED)
+    )
