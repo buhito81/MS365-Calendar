@@ -1,5 +1,6 @@
 """Do configuration setup."""
 
+import asyncio
 import logging
 import os
 
@@ -53,6 +54,8 @@ async def async_do_setup(hass: HomeAssistant, entry: ConfigEntry, account):
         entry,
         scanned_calendars,
     )
+    # Get the events before the entities are added, so they start with them
+    await asyncio.gather(*(coordinator.async_refresh() for coordinator in coordinators))
 
     return coordinators, keys, PLATFORMS
 
@@ -90,6 +93,8 @@ async def _async_setup_coordinators(
     )
 
     local_store = LocalCalendarStore(hass, entry.entry_id)
+    # Events are kept in memory now, so remove the file an older version wrote
+    await local_store.async_remove()
 
     coordinators = []
     keys = []

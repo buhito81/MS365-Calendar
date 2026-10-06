@@ -41,8 +41,10 @@ class MS365CalendarEventSyncManager:
     async def async_list_events(self, start_date, end_date):
         """Return the set of events matching the criteria."""
         events = await self._api.async_list_events(start_date, end_date)
+        # Exchange leaves a cancelled meeting on an attendee's calendar until removed
+        events = [event for event in events if not event.is_cancelled]
 
-        return self._filter_events(list(events))
+        return self._filter_events(events)
 
     def _filter_events(self, events):
         if not events or not self._exclude:

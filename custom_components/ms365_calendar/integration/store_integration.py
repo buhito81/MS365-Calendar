@@ -1,7 +1,5 @@
 """MS365 Calendar local storage."""
 
-from datetime import datetime
-import json
 import logging
 from typing import Any
 
@@ -13,47 +11,17 @@ from .sync.store import CalendarStore
 
 STORAGE_KEY_FORMAT = "{domain}.Storage-{entry_id}"
 STORAGE_VERSION = 1
-# Buffer writes every few minutes (plus guaranteed to be written at shutdown)
-STORAGE_SAVE_DELAY_SECONDS = 120
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class JSONEncoder(json.JSONEncoder):
-    """Encoder for serialising an event."""
-
-    def default(self, o):
-        """Default method for the JSONEncoder."""
-        attributes = {}
-
-        if not hasattr(o, "__dict__"):
-            return None
-        for k, v in vars(o).items():
-            key = _beautify_key(k)
-            if key not in [
-                "con",
-                "protocol",
-                "main_resource",
-                "untrack",
-            ] and not key.startswith("_"):
-                if isinstance(v, datetime):
-                    val = str(v)
-                elif hasattr(v, "value"):
-                    val = v.value
-                else:
-                    val = v
-                attributes[key] = val
-
-        return attributes
-
-
-def _beautify_key(key):
-    index = key.find("__")
-    return key if index <= 0 else key[index + 2 :]
-
-
 class LocalCalendarStore(CalendarStore):
-    """Storage for local persistence of calendar and event data."""
+    """Storage of calendar and event data, held in memory.
+
+    The events are not written to disk: the file they were written to could not be
+    turned back into events after a restart, so it cost time and kept private data
+    for nothing. The store is only used to remove a file an older version wrote.
+    """
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         """Initialize LocalCalendarStore."""
@@ -62,27 +30,16 @@ class LocalCalendarStore(CalendarStore):
             STORAGE_VERSION,
             STORAGE_KEY_FORMAT.format(domain=DOMAIN, entry_id=entry_id),
             private=True,
-            encoder=JSONEncoder,
         )
-        self._data: dict[str, Any] | None = None
+        self._data: dict[str, Any] = {}
 
     async def async_load(self) -> dict[str, Any] | None:
         """Load data."""
-        if self._data is None:
-            _LOGGER.debug("Load from store")
-            self._data = await self._store.async_load() or {}
         return self._data
 
     async def async_save(self, data: dict[str, Any]) -> None:
         """Save data."""
         self._data = data
-
-        def provide_data() -> dict:
-            _LOGGER.debug("Delayed save data")
-
-            return data
-
-        self._store.async_delay_save(provide_data, STORAGE_SAVE_DELAY_SECONDS)
 
     async def async_remove(self) -> None:
         """Remove data."""
