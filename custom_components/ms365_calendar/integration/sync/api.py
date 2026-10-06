@@ -4,6 +4,7 @@ import functools as ft
 import logging
 from typing import Any, cast
 
+from msal.exceptions import MsalServiceError
 from requests.exceptions import (
     ConnectionError as RequestConnectionError,
     HTTPError,
@@ -24,6 +25,7 @@ from ..const_integration import (
     CONST_GROUP,
     DOMAIN,
     ITEMS,
+    TOKEN_FILE_LOCKED,
     EventResponse,
 )
 from ..filemgmt_integration import (
@@ -216,7 +218,18 @@ class MS365CalendarService:
                 translation_key="request_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        except (RequestConnectionError, RetryError, Timeout) as err:
+        except (
+            MsalServiceError,
+            RequestConnectionError,
+            RetryError,
+            RuntimeError,
+            Timeout,
+        ) as err:
+            # A token file locked by another refresh can be tried again later
+            if isinstance(err, RuntimeError) and not str(err).startswith(
+                TOKEN_FILE_LOCKED
+            ):
+                raise
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="connection_failed",

@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 import logging
 
+from msal.exceptions import MsalServiceError
 from requests.exceptions import (
     ConnectionError as RequestConnectionError,
     HTTPError,
@@ -32,17 +33,14 @@ from .const_integration import (
     DEFAULT_DAYS_FORWARD,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    TOKEN_FILE_LOCKED,
+    TOKEN_REFRESH_FAILED,
 )
 from .sync.sync import MS365CalendarEventSyncManager
 from .sync.timeline import MS365Timeline
 from .utils_integration import get_end_date, get_start_date
 
 _LOGGER = logging.getLogger(__name__)
-# O365 errors for a token that can no longer be refreshed
-TOKEN_REFRESH_FAILED = (
-    "Refresh token operation failed: invalid_grant",
-    "Refresh token operation failed: invalid_client",
-)
 # Maximum number of upcoming events to consider for state changes between
 # coordinator updates.
 # MAX_UPCOMING_EVENTS = 20
@@ -110,8 +108,8 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
                 err,
             )
             self.sync_state = STATE_PROBLEM
-        except RuntimeError as err:
-            if not self._async_token_issue(err):
+        except (MsalServiceError, RuntimeError) as err:
+            if not self._async_token_error(err):
                 raise
             _LOGGER.error("Unable to refresh the token, fetching from cache: %s", err)
             self.sync_state = STATE_PROBLEM
@@ -146,8 +144,8 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
                     "from MS Graph, fetching from cache.",
                     err,
                 )
-            except RuntimeError as err:
-                if not self._async_token_issue(err):
+            except (MsalServiceError, RuntimeError) as err:
+                if not self._async_token_error(err):
                     raise
                 self._log_error(
                     "Unable to refresh the token, fetching from cache.", err
@@ -263,10 +261,13 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
     def _token_issue_id(self) -> str:
         return f"{TOKEN_FILE_EXPIRED}_{self.config_entry.entry_id}"
 
-    def _async_token_issue(self, err: RuntimeError) -> bool:
-        """Raise the expired token repair issue when the token cannot be refreshed."""
+    def _async_token_error(self, err: Exception) -> bool:
+        """Check for a failed token refresh, and raise the repair issue if needed."""
         if not str(err).startswith(TOKEN_REFRESH_FAILED):
-            return False
+            # The login service failed, or another refresh kept the token file locked
+            return isinstance(err, MsalServiceError) or str(err).startswith(
+                TOKEN_FILE_LOCKED
+            )
         ir.async_create_issue(
             self.hass,
             DOMAIN,

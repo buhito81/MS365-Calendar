@@ -2,6 +2,7 @@
 
 import logging
 
+from msal.exceptions import MsalServiceError
 from oauthlib.oauth2.rfc6749.errors import InvalidClientError
 from requests.exceptions import (
     ConnectionError as RequestConnectionError,
@@ -174,7 +175,7 @@ async def _async_check_token(hass: HomeAssistant, account, entity_name):
             _LOGGER.warning(SECRET_EXPIRED, entity_name)
             return False
         raise
-    except (RequestConnectionError, RetryError, Timeout) as err:
+    except (MsalServiceError, RequestConnectionError, RetryError, Timeout) as err:
         raise _not_ready(err) from err
 
     return True
@@ -183,7 +184,7 @@ async def _async_check_token(hass: HomeAssistant, account, entity_name):
 async def _async_do_setup(hass: HomeAssistant, entry: MS365ConfigEntry, account):
     try:
         return await setup_integration.async_do_setup(hass, entry, account)
-    except (RequestConnectionError, RetryError, Timeout) as err:
+    except (MsalServiceError, RequestConnectionError, RetryError, Timeout) as err:
         raise _not_ready(err) from err
 
 

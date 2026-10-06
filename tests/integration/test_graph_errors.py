@@ -1,6 +1,7 @@
 # pylint: disable=unused-argument,line-too-long
 """Test the calendar's handling of MS Graph and token errors."""
 
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +11,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
+from portalocker.exceptions import LockException
 from requests.exceptions import ConnectionError as RequestConnectionError, RetryError
 from requests_mock import Mocker
 
@@ -21,7 +23,13 @@ from .const_integration import DOMAIN, URL
 from .fixtures import ClientFixture
 from .helpers_integration.mocks import MS365MOCKS
 
+API = "custom_components.ms365_calendar.classes.api"
 CALENDAR1_VIEW = f"{URL.CALENDARS.value}/calendar1/calendarView"
+# The token cannot be refreshed for now, though nothing is wrong with it
+REFRESH_UNAVAILABLE = [
+    ("login", "HTTP Error: 503"),
+    ("locked", "Could not access locked token file after 3"),
+]
 
 
 async def test_setup_retry_calendar_list(
@@ -139,6 +147,39 @@ async def test_get_events_token_refresh_failure(
         await _async_get_events(hass)
 
 
+@pytest.mark.parametrize(("cause", "error"), REFRESH_UNAVAILABLE)
+async def test_token_refresh_unavailable(
+    tmp_path,
+    hass: HomeAssistant,
+    setup_base_integration,
+    base_config_entry: MS365MockConfigEntry,
+    requests_mock: Mocker,
+    issue_registry: ir.IssueRegistry,
+    caplog: pytest.LogCaptureFixture,
+    cause,
+    error,
+) -> None:
+    """Test a token that cannot be refreshed for now uses the cache, with no issue."""
+    coordinator = _coordinator(base_config_entry, "calendar1")
+    await _async_expire_token(hass, tmp_path, base_config_entry)
+    requests_mock.get(CALENDAR1_VIEW, status_code=401)
+
+    with _refresh_unavailable(requests_mock, cause):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        result = await _async_get_events(hass)
+
+    check_entity_state(
+        hass, "calendar.test_calendar1", "on", attributes={"sync_state": "problem"}
+    )
+    assert f"Unable to refresh the token, fetching from cache: {error}" in caplog.text
+    assert "Unexpected error" not in caplog.text
+    # A range outside the synced one also comes from the cache
+    assert result["calendar.test_calendar1"]["events"] == []
+    assert f"Unable to refresh the token, fetching from cache. - {error}" in caplog.text
+    assert not issue_registry.issues
+
+
 async def test_remove_missing_event(
     hass: HomeAssistant,
     setup_update_integration,
@@ -166,6 +207,33 @@ async def test_remove_missing_event(
     assert (
         str(exc_info.value) == "Event event9 was not found in calendar.test_calendar1"
     )
+
+
+@pytest.mark.parametrize(("cause", "error"), REFRESH_UNAVAILABLE)
+async def test_remove_event_token_refresh_unavailable(
+    tmp_path,
+    hass: HomeAssistant,
+    setup_update_integration,
+    base_config_entry: MS365MockConfigEntry,
+    requests_mock: Mocker,
+    cause,
+    error,
+) -> None:
+    """Test a service call while the token cannot be refreshed gives a clear error."""
+    await _async_expire_token(hass, tmp_path, base_config_entry)
+    requests_mock.get(f"{URL.CALENDARS.value}/calendar1/events/event1", status_code=401)
+
+    with (
+        _refresh_unavailable(requests_mock, cause),
+        pytest.raises(HomeAssistantError) as exc_info,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "remove_calendar_event",
+            {"entity_id": "calendar.test_calendar1", "event_id": "event1"},
+            blocking=True,
+        )
+    assert str(exc_info.value) == f"Unable to connect to MS Graph: {error}"
 
 
 async def test_respond_refused(
@@ -248,6 +316,19 @@ async def _async_expire_token(hass: HomeAssistant, tmp_path, entry):
     await hass.async_add_executor_job(expire_access_token, tmp_path)
     token_backend = entry.runtime_data.ha_account.account.con.token_backend
     await hass.async_add_executor_job(token_backend.load_token)
+
+
+@contextmanager
+def _refresh_unavailable(requests_mock: Mocker, cause):
+    """Have the token refresh fail for now."""
+    if cause == "login":
+        # The login service is down
+        mock_refresh_failure(requests_mock, "temporarily_unavailable", 503)
+        yield
+    else:
+        # Another refresh keeps the token file locked
+        with patch(f"{API}.Lock", side_effect=LockException), patch(f"{API}.time"):
+            yield
 
 
 async def _async_get_events(hass: HomeAssistant):

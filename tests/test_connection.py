@@ -61,6 +61,29 @@ async def test_setup_retry_when_unreachable(
     assert not issue_registry.issues
 
 
+async def test_setup_retry_when_login_unavailable(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+    issue_registry: ir.IssueRegistry,
+) -> None:
+    """Test setup is retried when the login service fails to refresh the token."""
+    MS365MOCKS.standard_mocks(requests_mock)
+    expire_access_token(tmp_path)
+    requests_mock.get(URL.ME.value, status_code=401)
+    mock_refresh_failure(requests_mock, "temporarily_unavailable", 503)
+    base_config_entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert base_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert base_config_entry.reason == "Unable to connect to MS Graph: HTTP Error: 503"
+    assert not issue_registry.issues
+
+
 async def test_expired_secret(
     tmp_path,
     hass: HomeAssistant,
