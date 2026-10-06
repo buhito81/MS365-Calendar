@@ -83,14 +83,24 @@ async def test_sync_token_refresh_failure(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    issue = issue_registry.async_get_issue(DOMAIN, "expired")
-    assert issue is not None
-    assert issue.translation_placeholders["entity_name"] == ENTITY_NAME
+    issues = list(issue_registry.issues.values())
+    assert [issue.translation_key for issue in issues] == ["expired"]
+    assert issues[0].translation_placeholders["entity_name"] == ENTITY_NAME
     check_entity_state(
         hass, "calendar.test_calendar1", "on", attributes={"sync_state": "problem"}
     )
     assert "Refresh token operation failed: invalid_grant" in caplog.text
     assert "Unexpected error" not in caplog.text
+
+    # The issue goes once the calendar syncs again, such as after a reconfigure
+    MS365MOCKS.standard_mocks(requests_mock)
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert not issue_registry.issues
+    check_entity_state(
+        hass, "calendar.test_calendar1", "on", attributes={"sync_state": "ok"}
+    )
 
     # Other errors are not taken for a token problem
     with patch(
@@ -116,7 +126,8 @@ async def test_get_events_token_refresh_failure(
     result = await _async_get_events(hass)
 
     assert result["calendar.test_calendar1"]["events"] == []
-    assert issue_registry.async_get_issue(DOMAIN, "expired") is not None
+    issues = list(issue_registry.issues.values())
+    assert [issue.translation_key for issue in issues] == ["expired"]
 
     # Other errors are not taken for a token problem
     with (

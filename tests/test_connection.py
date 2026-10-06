@@ -82,9 +82,9 @@ async def test_expired_secret(
 
     assert f"Client Secret expired for account: {ENTITY_NAME}" in caplog.text
     assert base_config_entry.state is ConfigEntryState.SETUP_ERROR
-    issue = issue_registry.async_get_issue(DOMAIN, "expired")
-    assert issue is not None
-    assert issue.translation_placeholders["entity_name"] == ENTITY_NAME
+    issues = list(issue_registry.issues.values())
+    assert [issue.translation_key for issue in issues] == ["expired"]
+    assert issues[0].translation_placeholders["entity_name"] == ENTITY_NAME
 
 
 async def test_requests_have_timeout(

@@ -102,6 +102,8 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         try:
             await self.sync.run(self._last_sync_min, self._last_sync_max)
             self.sync_state = STATE_OK
+            # The token works again, such as after a reconfigure
+            ir.async_delete_issue(self.hass, DOMAIN, self._token_issue_id)
         except (HTTPError, RetryError, RequestConnectionError) as err:
             _LOGGER.error(
                 "Error syncing calendar events from MS Graph, fetching from cache: %s",
@@ -257,14 +259,18 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         else:
             _LOGGER.debug("Repeat error - %s - %s", error, err)
 
+    @property
+    def _token_issue_id(self) -> str:
+        return f"{TOKEN_FILE_EXPIRED}_{self.config_entry.entry_id}"
+
     def _async_token_issue(self, err: RuntimeError) -> bool:
-        """Raise the same repair issue as setup when the token cannot be refreshed."""
+        """Raise the expired token repair issue when the token cannot be refreshed."""
         if not str(err).startswith(TOKEN_REFRESH_FAILED):
             return False
         ir.async_create_issue(
             self.hass,
             DOMAIN,
-            TOKEN_FILE_EXPIRED,
+            self._token_issue_id,
             is_fixable=False,
             severity=ir.IssueSeverity.ERROR,
             translation_key=TOKEN_FILE_EXPIRED,
