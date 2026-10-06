@@ -90,7 +90,7 @@
           "name": "Calendar friendly name",
           "end_offset": "Hours to offset the end time",
           "start_offset": "Hours to offset the start time",
-          "max_results": "Max number of events to retrieve"
+          "max_results": "Max number of events in the data attribute"
         },
         "description": "Setup options for {entity_name} - calendar device_id {device_id}"
       }
