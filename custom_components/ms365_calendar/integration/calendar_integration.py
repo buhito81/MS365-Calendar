@@ -248,7 +248,7 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
         event = CalendarEvent(
             get_hass_date(vevent.start, vevent.is_all_day),
             get_hass_date(get_end_date(vevent), vevent.is_all_day),
-            vevent.subject,
+            vevent.subject or "",
             clean_html(vevent.body),
             vevent.location["displayName"],
             uid=vevent.object_id,
@@ -286,7 +286,10 @@ class MS365CalendarEntity(MS365Entity, CalendarEntity):
         _LOGGER.debug("End update for %s", self.name)
 
     def _get_current_event(self):
-        vevent = self.coordinator.get_current_event()
+        vevent = None
+        # No data yet when the first refresh failed with an error that is not caught
+        if self.coordinator.data is not None:
+            vevent = self.coordinator.get_current_event()
         if not vevent:
             _LOGGER.debug(
                 "No matching event found in the calendar results for %s",
