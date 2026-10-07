@@ -3,6 +3,8 @@
 import logging
 import re
 
+from O365.calendar import EventResponse  # pylint: disable=no-name-in-module
+
 from ..const_integration import EVENT_SYNC, ITEMS
 from .api import MS365CalendarEventStoreService, MS365CalendarService
 from .store import CalendarStore, ScopedCalendarStore
@@ -19,6 +21,8 @@ class MS365CalendarEventSyncManager:
         calendar_id: str | None = None,
         store: CalendarStore | None = None,
         exclude: list | None = None,
+        exclude_declined: bool = False,
+        show_as_exclude: list | None = None,
     ) -> None:
         """Initialize CalendarEventSyncManager."""
         self._api = api
@@ -27,6 +31,8 @@ class MS365CalendarEventSyncManager:
             ScopedCalendarStore(store, EVENT_SYNC), self.calendar_id
         )
         self._exclude = _compile_excludes(exclude)
+        self._exclude_declined = exclude_declined
+        self._show_as_exclude = show_as_exclude or []
 
     @property
     def store_service(self) -> MS365CalendarEventStoreService:
@@ -42,9 +48,22 @@ class MS365CalendarEventSyncManager:
         """Return the set of events matching the criteria."""
         events = await self._api.async_list_events(start_date, end_date)
         # Exchange leaves a cancelled meeting on an attendee's calendar until removed
-        events = [event for event in events if not event.is_cancelled]
+        events = [
+            event
+            for event in events
+            if not event.is_cancelled and not self._is_hidden(event)
+        ]
 
         return self._filter_events(events)
+
+    def _is_hidden(self, event):
+        """Check if the settings hide the event, by the owner's response or show as."""
+        if (
+            self._exclude_declined
+            and event.response_status.status == EventResponse.Declined
+        ):
+            return True
+        return event.show_as in self._show_as_exclude
 
     def _filter_events(self, events):
         if not events or not self._exclude:

@@ -19,8 +19,10 @@ from .const_integration import (
     CONF_ENTITIES,
     CONF_ENTITY,
     CONF_EXCLUDE,
+    CONF_EXCLUDE_DECLINED,
     CONF_SEARCH,
     CONF_SENSITIVITY_EXCLUDE,
+    CONF_SHOW_AS_EXCLUDE,
     CONF_TRACK,
     PLATFORMS,
     YAML_CALENDARS_FILENAME,
@@ -133,6 +135,8 @@ async def _async_setup_coordinators(
                         # Names can be shared, so keep the events of each entity apart
                         store=ScopedCalendarStore(local_store, entity[CONF_DEVICE_ID]),
                         exclude=entity.get(CONF_EXCLUDE),
+                        exclude_declined=entity.get(CONF_EXCLUDE_DECLINED, False),
+                        show_as_exclude=entity.get(CONF_SHOW_AS_EXCLUDE),
                     )
                     coordinators.append(
                         MS365CalendarSyncCoordinator(

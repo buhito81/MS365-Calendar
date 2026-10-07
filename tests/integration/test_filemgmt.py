@@ -123,6 +123,39 @@ async def test_deleted_file_keeps_sensitivity(
     assert base_config_entry.state is ConfigEntryState.LOADED
 
 
+async def test_deleted_file_keeps_response_filters(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+) -> None:
+    """Test deleting yaml content keeps the declined and show as filters."""
+    MS365MOCKS.response_event_mocks(requests_mock)
+    yaml_setup(tmp_path, "ms365_calendars_delete_response_filters")
+
+    base_config_entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    calendars = read_yaml_file(tmp_path)
+    assert [calendar["cal_id"] for calendar in calendars] == ["calendar1"]
+    entity = calendars[0]["entities"][0]
+    assert entity["exclude_declined"] is True
+    assert entity["show_as_exclude"] == ["workingElsewhere", "oof"]
+
+    await hass.config_entries.async_reload(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert base_config_entry.state is ConfigEntryState.LOADED
+    data = hass.states.get("calendar.test_calendar1").attributes["data"]
+    assert sorted(event["summary"] for event in data) == [
+        "Accepted meeting",
+        "Tentative meeting",
+        "Unanswered meeting",
+    ]
+
+
 async def test_file_without_newline(
     tmp_path,
     hass: HomeAssistant,

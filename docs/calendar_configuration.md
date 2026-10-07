@@ -11,7 +11,7 @@ The integration uses an external `ms365_calendars_<entity_name>.yaml` file which
 * start_offset
 * max_results
 
-Group calendars plus device_id, search and exclude must be managed via the yaml file.
+Group calendars plus device_id, search, exclude, sensitivity_exclude, exclude_declined and show_as_exclude must be managed via the yaml file.
 
 ## Example Calendar yaml:
 ```yaml
@@ -52,6 +52,8 @@ Key | Type | Required | Description
 `end_offset` | `integer` | `False` | Number of hours to offset the end time to search for events for (negative numbers to offset into the past).
 `max_results` | `integer` | `False` | Max number of events in the `data` attribute. Default is no limit.
 `sensitivity_exclude` | `list[string]` | `False` | List of sensitivities to exclude from the calendar (`normal`/`personal`/`private`/`confidential`)
+`exclude_declined` | `boolean` | `False` | True=Exclude the events the calendar's owner has declined (on your own calendars, the events you have declined). Default is false
+`show_as_exclude` | `list[string]` | `False` | List of show as values to exclude from the calendar (`free`/`tentative`/`busy`/`oof`/`workingElsewhere`/`unknown`)
 
 ## Group calendars
 
@@ -94,3 +96,40 @@ To exclude specific sensitivities from being included in the calendar.
      - private
      - confidential
 ```
+
+## Exclude Declined
+
+Events you have declined can stay on your calendar. To exclude them, set `exclude_declined` to `true`. This uses the response of the calendar's owner, which is shown in the `response` field of each event, see [Sensors](./sensor.md). On your own calendars that is your own response. On a calendar someone else has shared with you, or with `shared_mailbox`, it hides the events that person has declined, not the ones you have declined. On a group calendar the response is the group's, usually `organizer`, so it hides nothing there.
+
+```yaml
+    exclude_declined: true
+```
+
+## Show As Exclude
+
+To exclude events by how they show in the calendar, such as free time or out of office.
+
+```yaml
+    show_as_exclude:
+     - free
+     - oof
+```
+
+The values are those of MS365: `free`, `tentative`, `busy`, `oof` (out of office), `workingElsewhere` and `unknown`. The names shown in the `show_as` field of the event data, such as `WorkingElsewhere`, can be used too.
+
+An entity with both settings:
+
+```yaml
+- cal_id: xxxx
+  entities:
+  - device_id: work_calendar
+    end_offset: 24
+    exclude_declined: true
+    name: My Work Calendar
+    show_as_exclude:
+    - free
+    start_offset: 0
+    track: true
+```
+
+Like the other exclude settings, these leave the events out everywhere the entity is used: its state and `data` attribute, the calendar panel, `calendar.get_events` and `ms365_calendar.get_calendar_events`, also for dates outside the synchronized range.

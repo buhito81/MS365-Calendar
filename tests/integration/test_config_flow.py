@@ -129,6 +129,37 @@ async def test_options_flow_keeps_sensitivity_exclude(
     assert entity["sensitivity_exclude"] == ["private"]
 
 
+async def test_options_flow_keeps_response_filters(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+) -> None:
+    """Test the options flow keeps the declined and show as filters."""
+    MS365MOCKS.response_event_mocks(requests_mock)
+    yaml_setup(tmp_path, "ms365_calendars_both_response_filters")
+    base_config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await update_options(hass, base_config_entry)
+    await hass.async_block_till_done()
+
+    entity = read_yaml_file(tmp_path)[0]["entities"][0]
+    assert entity[CONF_NAME] == "Calendar1_Changed"
+    assert entity["exclude_declined"] is True
+    assert entity["show_as_exclude"] == ["workingElsewhere", "oof"]
+
+    # The reload with the changed options still leaves the events out
+    data = hass.states.get("calendar.test_calendar1").attributes["data"]
+    assert sorted(event["summary"] for event in data) == [
+        "Accepted meeting",
+        "Tentative meeting",
+        "Unanswered meeting",
+    ]
+
+
 async def test_options_flow_no_offsets(
     tmp_path,
     hass: HomeAssistant,
