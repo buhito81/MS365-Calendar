@@ -8,6 +8,7 @@ import yaml
 
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
+import homeassistant.helpers.config_validation as cv
 
 from ..classes.config_entry import MS365ConfigEntry
 from ..const import CONF_ENTITY_NAME
@@ -38,10 +39,12 @@ def load_yaml_file(path, item_id, item_schema):
                 try:
                     items[item[item_id]] = item_schema(item)
                 except VoluptuousError as exception:
-                    # keep going
+                    # keep going, naming the calendar so the mistake can be found
                     _LOGGER.warning(
-                        "Invalid Data - duplicate entries may be created in file %s: %s",
+                        "Invalid Data - duplicate entries may be created in file %s, "
+                        "calendar %s: %s",
                         path,
+                        _describe_item(item, item_id),
                         exception,
                     )
     except FileNotFoundError:
@@ -49,6 +52,18 @@ def load_yaml_file(path, item_id, item_schema):
         return {}
 
     return items
+
+
+def _describe_item(item, item_id):
+    """Describe an item of the file by its id and the names of its entities."""
+    if not isinstance(item, dict):
+        return repr(item)
+    names = [
+        entity.get(CONF_NAME)
+        for entity in cv.ensure_list(item.get(CONF_ENTITIES))
+        if isinstance(entity, dict)
+    ]
+    return f"{item_id} {item.get(item_id)!r} with entities named {names}"
 
 
 def write_yaml_file(yaml_filepath, cal):
