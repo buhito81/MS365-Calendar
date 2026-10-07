@@ -3,7 +3,7 @@ title: Calendar Panel
 nav_order: 17
 ---
 
-Creation, modification deletion of events is possible via the Calendar Panel. This needs `enable_update` set on the integration, and only works for calendars you are allowed to edit. In a group calendar you can only create events; editing and deleting them is not possible. This UI allows you to create recurring events, which is not possible via the HA services methods. 
+Creation, modification deletion of events is possible via the Calendar Panel. This needs `enable_update` set on the integration, and only works for calendars you are allowed to edit. In a group calendar you can only create events; editing and deleting them is not possible. This UI allows you to create recurring events. The core `calendar.create_event` action cannot, but `ms365_calendar.create_calendar_event` can, with its `rrule`, see [Repeating events](./services.md#repeating-events).
 
 If you choose 'This and all future events' when deleting (before HA 2026.9 the button is 'Delete all future events'), it will delete the whole series not just future events. This is due to the differences between MS365_Calendar and the iCal specification that the core calendar is built on.
 

@@ -32,6 +32,7 @@ from .const_integration import (
     ATTR_MESSAGE,
     ATTR_REMIND_BEFORE_MINUTES,
     ATTR_RESPONSE,
+    ATTR_RRULE,
     ATTR_SEND_RESPONSE,
     ATTR_SENSITIVITY,
     ATTR_SHOW_AS,
@@ -139,6 +140,8 @@ CALENDAR_SERVICE_CREATE_SCHEMA = vol.All(
             vol.Optional(ATTR_SENSITIVITY): vol.Coerce(EventSensitivity),
             vol.Optional(ATTR_SHOW_AS): vol.Coerce(EventShowAs),
             vol.Optional(ATTR_IS_ALL_DAY): bool,
+            # Checked when the event is built, so a rule from the calendar panel is too
+            vol.Optional(ATTR_RRULE): cv.string,
             vol.Optional(ATTR_ATTENDEES): [CALENDAR_SERVICE_ATTENDEE_SCHEMA],
             vol.Optional(ATTR_IS_REMINDER_ON): bool,
             vol.Optional(ATTR_REMIND_BEFORE_MINUTES): vol.All(

@@ -195,6 +195,18 @@
     },
     "series_date_change": {
       "message": "Changes to this and following events apply to the whole series, which keeps its own dates, so the date cannot be changed. Change the date of this event only, or change the series in Outlook"
+    },
+    "rrule_space": {
+      "message": "Repeat rule {rrule} has a space or line break in it. Separate its parts with ; and no spaces, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10"
+    },
+    "rrule_no_freq": {
+      "message": "Repeat rule {rrule} has no FREQ. Give the rule without RRULE: in front, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10"
+    },
+    "rrule_invalid": {
+      "message": "Repeat rule {rrule} is not valid: {error}"
+    },
+    "rrule_not_supported": {
+      "message": "Repeat rule {rrule} cannot be created in MS365: {part} is not supported"
     }
   },
   "services": {
@@ -259,6 +271,10 @@
         "is_all_day": {
           "description": "Set whether event is all day (optional)",
           "name": "All Day"
+        },
+        "rrule": {
+          "description": "Make the event repeat, with an RFC 5545 RRULE without RRULE: in front, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10. The documentation lists the rules MS365 supports (optional)",
+          "name": "Repeat rule"
         },
         "attendees": {
           "description": "List of attendees formatted as email: example@example.com type: Required, Optional, or Resource (optional)",

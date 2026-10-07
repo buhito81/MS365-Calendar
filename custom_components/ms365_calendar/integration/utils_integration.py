@@ -7,9 +7,11 @@ from zoneinfo import ZoneInfoNotFoundError
 
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from dateutil import parser
+from dateutil.rrule import rrulestr
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util, slugify
 from O365.calendar import Attendee  # pylint: disable=no-name-in-module)
@@ -39,6 +41,8 @@ from .const_integration import (
     DOMAIN,
     INDEXES,
     LOCATION_ADDRESS,
+    RRULE_FREQUENCIES,
+    RRULE_PARTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -203,8 +207,10 @@ def add_call_data_to_event(event, subject, start, end, **kwargs):
     _add_attendees(kwargs.get(ATTR_ATTENDEES, []), event)
     _add_all_day(is_all_day, event)
 
-    if kwargs.get(ATTR_RRULE):
-        _rrule_processing(event, kwargs[ATTR_RRULE])
+    # A rule written as a YAML block ends in a line break
+    if rrule := (kwargs.get(ATTR_RRULE) or "").strip():
+        _validate_rrule(rrule)
+        _rrule_processing(event, rrule)
     return event
 
 
@@ -281,6 +287,89 @@ def _add_all_day(is_all_day, event):
                 0,
                 tzinfo=dt_util.DEFAULT_TIME_ZONE,
             )
+
+
+def _validate_rrule(rrule):
+    """Refuse a repeat rule that _rrule_processing would not create as written.
+
+    The rule is parsed as the HA calendar parses it. MS Graph only has some kinds of
+    series, so anything else is refused rather than creating a different series.
+    """
+    if any(char.isspace() for char in rrule):
+        # dateutil reads what follows a space as another rule, which has no FREQ
+        raise _rrule_error("rrule_space", rrule)
+    rules = {}
+    for item in rrule.split(";"):
+        key, _, value = item.partition("=")
+        rules[key] = value
+    if "FREQ" not in rules:
+        raise _rrule_error("rrule_no_freq", rrule)
+    try:
+        rrulestr(rrule)
+    except (ValueError, OverflowError) as err:
+        raise _rrule_error("rrule_invalid", rrule, error=str(err)) from err
+    if part := _unsupported_rrule_part(rules):
+        raise _rrule_error("rrule_not_supported", rrule, part=part)
+
+
+def _rrule_error(translation_key, rrule, **placeholders):
+    return ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key=translation_key,
+        translation_placeholders={"rrule": rrule, **placeholders},
+    )
+
+
+def _unsupported_rrule_part(rules):
+    """Get the part of a valid rule that _rrule_processing would not follow."""
+    for key, value in rules.items():
+        if key not in RRULE_PARTS:
+            return f"{key}={value}"
+    if rules["FREQ"] not in RRULE_FREQUENCIES:
+        return f"FREQ={rules['FREQ']}"
+    for key in ("INTERVAL", "COUNT"):
+        # O365 leaves out 0, and MS Graph refuses less
+        if int(rules.get(key, 1)) < 1:
+            return f"{key}={rules[key]}"
+    if "COUNT" in rules and "UNTIL" in rules:
+        # RFC 5545 does not allow both, and O365 would drop the count
+        return f"COUNT={rules['COUNT']};UNTIL={rules['UNTIL']}"
+    return _unsupported_rrule_days(rules)
+
+
+def _unsupported_rrule_days(rules):
+    """Get the BYDAY or BYMONTHDAY that _rrule_processing would not follow.
+
+    A weekly series repeats on days of the week, and a monthly series on one day of
+    the week in a given week or on one day of the month. A yearly series repeats on
+    the date it starts on, and a daily series every day.
+    """
+    freq = rules["FREQ"]
+    if "BYDAY" in rules and "BYMONTHDAY" in rules:
+        return f"BYDAY={rules['BYDAY']};BYMONTHDAY={rules['BYMONTHDAY']}"
+    if "BYDAY" in rules and not _is_supported_byday(freq, rules["BYDAY"]):
+        return f"FREQ={freq};BYDAY={rules['BYDAY']}"
+    if "BYMONTHDAY" in rules and not (
+        freq == "MONTHLY" and _is_day_of_month(rules["BYMONTHDAY"])
+    ):
+        return f"FREQ={freq};BYMONTHDAY={rules['BYMONTHDAY']}"
+    return None
+
+
+def _is_supported_byday(freq, byday):
+    """Check the days are ones _process_byday reads for the frequency."""
+    days = [(item[:-2], item[-2:]) for item in byday.split(",")]
+    if any(day not in DAYS for _, day in days):
+        return False
+    if freq == "WEEKLY":
+        return not any(index for index, _ in days)
+    # Outlook repeats one day a month, in the first to the fourth or the last week
+    return freq == "MONTHLY" and len(days) == 1 and days[0][0] in INDEXES
+
+
+def _is_day_of_month(bymonthday):
+    """Check it is one day of the month, or -1 that _rrule_processing reads as last."""
+    return "," not in bymonthday and (bymonthday == "-1" or 1 <= int(bymonthday) <= 31)
 
 
 def _rrule_processing(event, rrule):
