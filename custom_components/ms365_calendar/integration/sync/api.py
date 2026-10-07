@@ -117,6 +117,7 @@ class MS365CalendarService:
             "end",
             "is_all_day",
             "location",
+            "locations",
             "categories",
             "sensitivity",
             "show_as",

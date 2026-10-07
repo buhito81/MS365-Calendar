@@ -80,3 +80,13 @@ def read_yaml_file(tmp_path):
     path = tmp_path / STORAGE_LOCATION / f"{DOMAIN}s_test.yaml"
     with open(path, encoding="utf8") as file:
         return yaml.safe_load(file)
+
+
+def location_fields(events):
+    """Get the location fields of each event, by uid."""
+    return {
+        event["uid"]: {
+            key: event[key] for key in ("location", "location_details", "locations")
+        }
+        for event in events
+    }
