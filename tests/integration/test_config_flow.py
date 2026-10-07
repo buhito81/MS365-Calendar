@@ -138,7 +138,7 @@ async def test_options_flow_keeps_response_filters(
 ) -> None:
     """Test the options flow keeps the declined and show as filters."""
     MS365MOCKS.response_event_mocks(requests_mock)
-    yaml_setup(tmp_path, "ms365_calendars_response_filters")
+    yaml_setup(tmp_path, "ms365_calendars_both_response_filters")
     base_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -146,10 +146,18 @@ async def test_options_flow_keeps_response_filters(
     await update_options(hass, base_config_entry)
     await hass.async_block_till_done()
 
-    entities = read_yaml_file(tmp_path)[0]["entities"]
-    assert entities[0][CONF_NAME] == "Calendar1_Changed"
-    assert entities[1]["exclude_declined"] is True
-    assert entities[2]["show_as_exclude"] == ["workingElsewhere", "oof"]
+    entity = read_yaml_file(tmp_path)[0]["entities"][0]
+    assert entity[CONF_NAME] == "Calendar1_Changed"
+    assert entity["exclude_declined"] is True
+    assert entity["show_as_exclude"] == ["workingElsewhere", "oof"]
+
+    # The reload with the changed options still leaves the events out
+    data = hass.states.get("calendar.test_calendar1").attributes["data"]
+    assert sorted(event["summary"] for event in data) == [
+        "Accepted meeting",
+        "Tentative meeting",
+        "Unanswered meeting",
+    ]
 
 
 async def test_options_flow_no_offsets(

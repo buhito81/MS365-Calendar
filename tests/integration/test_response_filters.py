@@ -159,19 +159,30 @@ async def test_show_as_exclude_values(value, expected) -> None:
 
 
 @pytest.mark.parametrize(
-    "settings",
+    ("value", "index"),
     [
-        {"show_as_exclude": ["away"]},
-        {"show_as_exclude": ["busy", "BUSY"]},
-        {"show_as_exclude": [""]},
-        {"show_as_exclude": [None]},
-        {"exclude_declined": "maybe"},
+        (["away"], 0),
+        (["busy", "BUSY"], 1),
+        ([""], 0),
+        ([None], 0),
     ],
 )
-async def test_bad_settings_rejected(settings) -> None:
-    """Test a show as value MS Graph does not have, or a declined setting, is rejected."""
+async def test_bad_show_as_rejected(value, index) -> None:
+    """Test a show as value MS Graph does not have is rejected."""
+    with pytest.raises(Invalid) as err:
+        YAML_CALENDAR_ENTITY_SCHEMA({**ENTITY, "show_as_exclude": value})
+    # The value is rejected, not the setting
+    assert err.value.path == ["show_as_exclude", index]
+
+
+async def test_exclude_declined_values() -> None:
+    """Test exclude_declined takes a boolean, as yaml reads it or as text."""
+    for value, expected in ((True, True), ("yes", True), ("off", False)):
+        entity = YAML_CALENDAR_ENTITY_SCHEMA({**ENTITY, "exclude_declined": value})
+        assert entity["exclude_declined"] is expected
+
     with pytest.raises(Invalid):
-        YAML_CALENDAR_ENTITY_SCHEMA({**ENTITY, **settings})
+        YAML_CALENDAR_ENTITY_SCHEMA({**ENTITY, "exclude_declined": "maybe"})
 
 
 async def _async_setup(
