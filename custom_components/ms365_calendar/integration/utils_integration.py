@@ -75,6 +75,7 @@ def format_event_data(event):
         "location": event.location["displayName"],
         "location_details": _location_details(event.location),
         "locations": _locations(event.locations),
+        "online_meeting": _online_meeting(event),
         "categories": event.categories,
         "sensitivity": event.sensitivity.name,
         "show_as": event.show_as.name,
@@ -97,6 +98,7 @@ def format_event_data(event):
             for x in attendees
         ],
         "uid": event.object_id,
+        "web_link": event.web_link,
     }
 
 
@@ -143,6 +145,24 @@ def _locations(locations):
         {"name": place.get("displayName", ""), **(_location_details(place) or {})}
         for place in locations
     ]
+
+
+def _online_meeting(event):
+    """Get the service of an online meeting, such as Teams, and the link to join it.
+
+    The join link is in onlineMeeting. onlineMeetingUrl is deprecated, so it is only
+    used when there is no join link, as for some older Skype meetings.
+    """
+    join_url = (event.online_meeting or {}).get("joinUrl") or event.online_meeting_url
+    if not event.is_online_meeting and not join_url:
+        return None
+    # MS Graph says unknown for a service it does not name, and O365 has no value
+    # for a service it does not know
+    provider = getattr(event.online_meeting_provider, "value", "unknown")
+    return {
+        "provider": None if provider == "unknown" else provider,
+        "join_url": join_url,
+    }
 
 
 def get_hass_date(obj, is_all_day):

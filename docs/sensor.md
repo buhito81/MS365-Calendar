@@ -11,7 +11,7 @@ The `sync_state` attribute is `ok` when the last synchronization with MS Graph w
 
 The `data` attribute provides an array of the events in the period defined by the `start_offset` and `end_offset` in `ms365_calendars_<entity_name>.yaml`, sorted by start, so `data[0]` is the event that starts first. When `max_results` is set, only the first `max_results` of these events are kept. The attribute is rebuilt at every synchronization (see [`update_interval`](./installation_and_configuration.md#advanced-options)), and the period is counted from the time of that synchronization. Individual array elements can be accessed using the template notation `states.calendar.<entity_name>_<device_id>.attributes.data[0...n]`, with `<entity_name>_<device_id>` in lower case and every character other than a letter or digit (such as a space, `-` or `'`) replaced by `_` (see [Calendar configuration](./calendar_configuration.md)). For example, `states.calendar.account1_calendar.attributes.data[0]` for a calendar with device_id `Calendar`.
 
-Each event has `summary`, `start`, `end`, `all_day`, `description`, `location`, `location_details`, `locations`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees` and `uid`. `response` is the calendar owner's response to the event, in the same form as the `status` of each attendee: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or empty (`null`) when MS365 has no response for it. On your own calendars this is your own response. On a calendar someone else has shared with you, or with `shared_mailbox`, it is the response of the person whose calendar it is, not yours. On a group calendar it is the group's, which is usually `organizer`. Events the owner has declined can be left out with `exclude_declined`, see [Calendar configuration](./calendar_configuration.md#exclude-declined).
+Each event has `summary`, `start`, `end`, `all_day`, `description`, `location`, `location_details`, `locations`, `online_meeting`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees`, `uid` and `web_link`. `response` is the calendar owner's response to the event, in the same form as the `status` of each attendee: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or empty (`null`) when MS365 has no response for it. On your own calendars this is your own response. On a calendar someone else has shared with you, or with `shared_mailbox`, it is the response of the person whose calendar it is, not yours. On a group calendar it is the group's, which is usually `organizer`. Events the owner has declined can be left out with `exclude_declined`, see [Calendar configuration](./calendar_configuration.md#exclude-declined).
 
 ### Location details
 
@@ -67,5 +67,35 @@ For example, this template gives the address of the first event as one line, suc
 {% if details and details.address is defined %}
   {{ details.address.values() | join(', ') }}
 {% endif %}
+```
+{% endraw %}
+
+### Online meetings and links
+
+`online_meeting` is set for an online meeting, such as a Teams meeting, and is `null` for any other event. It has:
+
+- `provider` - the service of the meeting: `teams_for_business`, `skype_for_business` or `skype_for_consumer`, or `null` when MS Graph does not say which
+- `join_url` - the link to join the meeting, or `null` when MS365 has none for it. This is the join link MS Graph has for the meeting. Some older meetings, such as Skype meetings, only have a link in the older `onlineMeetingUrl` field of MS Graph, which is then used
+
+`online_meeting` only comes from what MS365 has on the meeting itself. A link to another service, such as Zoom or Webex, that is only in the text of the event is not looked for, so such an event has `online_meeting` `null`.
+
+`web_link` is the link that opens the event in Outlook on the web. It only opens the event for someone who can open that calendar there.
+
+```yaml
+online_meeting:
+  provider: teams_for_business
+  join_url: https://teams.microsoft.com/l/meetup-join/19%3ameeting_...
+web_link: https://outlook.office365.com/owa/?itemid=...&exvsurl=1&path=/calendar/item
+```
+
+Anyone who has the join link can use it to join the meeting, or wait in its lobby, so take care where you show or send it, such as in a notification or on a dashboard others can see. The `data` attribute is not kept in the history of the calendar, and the integration's diagnostics have no event data, so the links are in neither.
+
+For example, this template gives the join link of the first online meeting in the period that has one, such as for a button on a dashboard. It gives nothing when there is none:
+
+{% raw %}
+```
+{% set events = state_attr('calendar.user_primary', 'data') or [] %}
+{% set meetings = events | map(attribute='online_meeting') | select | selectattr('join_url') | list %}
+{{ meetings[0].join_url if meetings else '' }}
 ```
 {% endraw %}
