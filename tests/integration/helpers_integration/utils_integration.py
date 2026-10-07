@@ -90,3 +90,11 @@ def location_fields(events):
         }
         for event in events
     }
+
+
+def meeting_fields(events):
+    """Get the online meeting and web link of each event, by uid."""
+    return {
+        event["uid"]: {key: event[key] for key in ("online_meeting", "web_link")}
+        for event in events
+    }
