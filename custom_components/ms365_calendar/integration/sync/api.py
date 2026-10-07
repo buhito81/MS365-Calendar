@@ -153,6 +153,11 @@ class MS365CalendarService:
             "is_reminder_on",
             "reminderMinutesBeforeStart",
             "is_cancelled",
+            "is_online_meeting",
+            "online_meeting_provider",
+            "online_meeting",
+            "online_meeting_url",
+            "web_link",
         )
 
         if self._search is not None:
