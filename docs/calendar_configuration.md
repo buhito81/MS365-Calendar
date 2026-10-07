@@ -13,6 +13,8 @@ The integration uses an external `ms365_calendars_<entity_name>.yaml` file which
 
 Group calendars plus device_id, search, exclude, sensitivity_exclude, exclude_declined and show_as_exclude must be managed via the yaml file.
 
+The integration reads the calendars of the account when it starts or is reloaded. A calendar that is not in the file yet is added at the end, with `name` and `device_id` set to the calendar's name, `start_offset: 0`, `end_offset: 24` and `track` set by the `track_new_calendar` option (Enable new calendars). A calendar that has been removed from MS365 is removed from the file and its entity is deleted. Group calendars are never removed. Only the first 50 calendars of the account are read. Calendars past those are not added, but you can add them to the file by hand with their `cal_id` and an `entities` entry. When 50 calendars come back, none are removed from the file. Changes to the file are read when the integration is reloaded or Home Assistant restarts. When a calendar is removed from the file this way, or the options are saved, the file is written again, so comments in it are lost. Removing the integration deletes the file.
+
 ## Example Calendar yaml:
 ```yaml
 - cal_id: xxxx
@@ -48,16 +50,19 @@ Key | Type | Required | Description
 `track` | `boolean` | `True` | **True**=Create calendar entity. False=Don't create entity
 `search` | `string` | `False` | Only get events if subject contains this string. Enter it as it appears in the subject; an apostrophe does not need to be doubled
 `exclude` | `list[string/regex]` | `False` | Exclude events where the subject contains any one of items in the list of strings
-`start_offset` | `integer` | `False` | Number of hours to offset the start time to search for events for (negative numbers to offset into the past).
-`end_offset` | `integer` | `False` | Number of hours to offset the end time to search for events for (negative numbers to offset into the past).
+`start_offset` | `integer` | `False` | Start of the period of the `data` attribute, in hours from now (negative numbers to offset into the past). Default is 0
+`end_offset` | `integer` | `False` | End of the period of the `data` attribute, in hours from now (negative numbers to offset into the past). Default is 24
 `max_results` | `integer` | `False` | Max number of events in the `data` attribute. Default is no limit.
 `sensitivity_exclude` | `list[string]` | `False` | List of sensitivities to exclude from the calendar (`normal`/`personal`/`private`/`confidential`)
 `exclude_declined` | `boolean` | `False` | True=Exclude the events the calendar's owner has declined (on your own calendars, the events you have declined). Default is false
 `show_as_exclude` | `list[string]` | `False` | List of show as values to exclude from the calendar (`free`/`tentative`/`busy`/`oof`/`workingElsewhere`/`unknown`)
 
+If the settings of a calendar in the file are not valid, for example `sensitivity_exclude: Private` (write the sensitivity values in lower case as listed; unlike `show_as_exclude`, the names shown in the event data are not accepted), a `show_as_exclude` value MS365 does not have, or `exclude` given as a single string instead of a list, the warning `Invalid Data - duplicate entries may be created in file` is logged. The whole calendar entry, with all its entities, is then skipped and no entity is created from it. If it is a calendar the integration finds in your account, a new entry for it is added at the end of the file when the integration starts or is reloaded. That entry has the calendar's MS365 name as `name` and `device_id`, the default offsets, none of your other settings, and `track` set by the Enable new calendars option. The entity is then set up from that new entry, so it can have a different entity_id from the one you configured, or no entity at all if Enable new calendars is off. To fix it, correct your entry and delete the added one: while both are in the file, the last one is used.
+
 ## Group calendars
 
 The integration supports Group calendars in a fairly simple form. The below are the constraints.
+* The integration's `groups` option ("Enable support for group calendars") must be on, so that the `Group.Read.All` permission (`Group.ReadWrite.All` with `enable_update`) is requested, see [Installation and Configuration](./installation_and_configuration.md) and [Permissions](./permissions.md). It cannot be used with `shared_mailbox`.
 * This gets the default calendar for the group.
 * There is no discovery. You will need to find them in the MS Graph api. Using the MS Graph API you can call https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group to get the groups. You will need the relevant group's `id` for configuration purposes, see below
 * You can create events using the standard service, but you cannot modify/delete/respond to them.
@@ -66,14 +71,14 @@ The integration supports Group calendars in a fairly simple form. The below are 
 To configure a Group Calendar, add an extra section to `ms365_calendars_<entity_name>.yaml`. Set `cal_id` to `group:xxxxxxxxxxxxxxx` using the ID you found via the api above. Make sure to set the `device_id` to something unique.
 
 ```yaml
-  - cal_id: group:xxxx
-    entities:
-    - device_id: group_calendar
-      end_offset: 24
-      name: Group Calendar
-      start_offset: 0
-      track: true
-  ```
+- cal_id: group:xxxx
+  entities:
+  - device_id: group_calendar
+    end_offset: 24
+    name: Group Calendar
+    start_offset: 0
+    track: true
+```
 
 ## Exclude
 
@@ -86,6 +91,8 @@ To exclude calendar items from being displayed, the exclude attribute can be use
 ```
 
 Each item is used as a regex, so characters such as `[ ] ( ) . * + ?` have their regex meaning; to match them as text, escape them with `\` inside single quotes, e.g. `'\[External\]'`. An item that is not a valid regex, such as `"(Optional"`, is matched as plain text and a warning is logged.
+
+Matching is case sensitive. To ignore case, start the item with `(?i)`, e.g. `'(?i)^private'`. It must be at the very start: placed later, as in `'^(?i)private'`, the item is not a valid regex and is matched as plain text.
 
 ## Sensitivity Exclude
 

@@ -15,7 +15,7 @@ Key | Type | Required | Description
 `client_secret` | `string` | `True` | Client Secret from your Entra ID App Registration.
 `alt_auth_method` | `boolean` | `False` | If False (default), authentication is not dependent on internet access to your HA instance. [See Authentication](./authentication.md)
 `enable_update` | `boolean` | `False` | If True (**default is False**), this will enable the various services that allow updates to calendars
-`basic_calendar` | `boolean` | `False` | If True (**default is False**), the permission requested will be `calendar.ReadBasic`. `enable_update: true` = true cannot be used if `basic_calendar: true`
+`basic_calendar` | `boolean` | `False` | If True (**default is False**), the permission requested will be `Calendars.ReadBasic`. Cannot be used together with `enable_update` or `shared_mailbox`.
 `groups` | `boolean` | `False` | If True (**default is False**), will enable support for group calendars. No discovery is performed. You will need to know how to get the group ID from the MS Graph API. *Not for use on shared mailboxes*
 `shared_mailbox` | `string` | `False` | Email address or ID of shared mailbox (This should not be the same email address as the logged in user).
 
@@ -33,7 +33,7 @@ Key | Type | Required | Description
 Key | Type | Required | Description
 -- | -- | -- | --
 `calendar_list` | `list[string]` | `False` | The selectable list of calendars for which calendar entities will be created.
-`track_new_calendar` | `boolean` | `False` | If True (default), will automatically generate a calendar_entity when a new calendar is detected. The system scans for new calendars only on startup or reconfiguration/reload.
+`track_new_calendar` | `boolean` | `False` | If True (default), will automatically generate a calendar_entity when a new calendar is detected. The system scans for new calendars only on startup or reconfiguration/reload. Only the first 50 calendars are read, so a calendar after those is not detected. During the same scan, a calendar that no longer exists in MS365 is removed from the list and its entities are deleted, unless 50 calendars were read. Group calendars are never removed this way.
 
 ### Advanced Options
 
