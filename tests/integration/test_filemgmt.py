@@ -2,14 +2,25 @@
 """Test file management."""
 
 import json
+import logging
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from requests_mock import Mocker
 
-from custom_components.ms365_calendar.integration.const_integration import CONF_TRACK_NEW_CALENDAR
+from custom_components.ms365_calendar.integration.const_integration import (
+    CONF_CAL_ID,
+    CONF_TRACK_NEW_CALENDAR,
+)
+from custom_components.ms365_calendar.integration.filemgmt_integration import (
+    load_yaml_file,
+)
+from custom_components.ms365_calendar.integration.schema_integration import (
+    YAML_CALENDAR_DEVICE_SCHEMA,
+)
 
+from ..const import TEST_DATA_INTEGRATION_LOCATION
 from ..helpers.mock_config_entry import MS365MockConfigEntry
 from ..helpers.utils import load_json, mock_call
 from .const_integration import URL
@@ -70,6 +81,33 @@ async def test_corrupt_file(
     await hass.async_block_till_done()
 
     assert "Invalid Data - duplicate entries may be created" in caplog.text
+
+
+async def test_invalid_calendar_named(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test the warning for an invalid calendar names it and what is wrong."""
+    path = TEST_DATA_INTEGRATION_LOCATION / "yaml/ms365_calendars_invalid_entries.yaml"
+
+    calendars = load_yaml_file(path, CONF_CAL_ID, YAML_CALENDAR_DEVICE_SCHEMA)
+
+    # The invalid calendars are skipped as before
+    assert list(calendars) == ["calendar4"]
+    prefix = f"Invalid Data - duplicate entries may be created in file {path}, calendar"
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    ]
+    assert warnings == [
+        f"{prefix} cal_id 'calendar1' with entities named ['Calendar1', 'Calendar1 away']: "
+        "expected EventShowAs or one of 'free', 'tentative', 'busy', 'oof', "
+        "'working_elsewhere', 'unknown' at 'entities[1].show_as_exclude[0]'",
+        f"{prefix} cal_id 'calendar2' with entities named []: "
+        "expected a mapping at 'entities[0]'",
+        f"{prefix} 'calendar3': expected a mapping",
+    ]
+
 
 async def test_deleted_file(
     tmp_path,

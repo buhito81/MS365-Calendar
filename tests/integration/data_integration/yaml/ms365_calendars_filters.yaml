@@ -1,0 +1,18 @@
+- cal_id: calendar1
+  entities:
+  - device_id: Calendar1
+    end_offset: 24
+    exclude:
+    - ^Holiday
+    - (?i)WORKING
+    exclude_declined: true
+    name: Calendar1
+    search: meeting
+    sensitivity_exclude:
+    - private
+    show_as_exclude:
+    - workingElsewhere
+    - oof
+    start_offset: 0
+    track: true
+  note: Not known to the options

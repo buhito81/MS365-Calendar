@@ -185,6 +185,11 @@ CALENDAR_SERVICE_GET_EVENTS_SCHEMA = {
     vol.Required(ATTR_END_DATE_TIME): cv.datetime,
 }
 
+# The values of the sensitivity and show as filters, also read by the options flow
+SENSITIVITY_VALUE = vol.Coerce(EventSensitivity)
+# Snake case, so Graph's workingElsewhere and the name WorkingElsewhere match
+SHOW_AS_VALUE = vol.All(cv.string, to_snake_case, vol.Coerce(EventShowAs))
+
 YAML_CALENDAR_ENTITY_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
@@ -200,15 +205,11 @@ YAML_CALENDAR_ENTITY_SCHEMA = vol.Schema(
         vol.Optional(CONF_EXCLUDE): [cv.string],
         vol.Optional(CONF_MAX_RESULTS): cv.positive_int,
         vol.Optional(CONF_SENSITIVITY_EXCLUDE): vol.All(
-            cv.ensure_list, [vol.Coerce(EventSensitivity)]
+            cv.ensure_list, [SENSITIVITY_VALUE]
         ),
         # No default, so a calendar added to the file is written without it
         vol.Optional(CONF_EXCLUDE_DECLINED): cv.boolean,
-        # Snake case, so Graph's workingElsewhere and the name WorkingElsewhere match
-        vol.Optional(CONF_SHOW_AS_EXCLUDE): vol.All(
-            cv.ensure_list,
-            [vol.All(cv.string, to_snake_case, vol.Coerce(EventShowAs))],
-        ),
+        vol.Optional(CONF_SHOW_AS_EXCLUDE): vol.All(cv.ensure_list, [SHOW_AS_VALUE]),
     }
 )
 

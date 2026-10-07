@@ -4,14 +4,15 @@ nav_order: 6
 ---
 
 # Calendar configuration
-The integration uses an external `ms365_calendars_<entity_name>.yaml` file which is stored in the `ms365_storage` directory. Much of this can be managed by the UI, but more complex items must be managed via the yaml file. Items that can by the standard integration configure UI are:
+The integration uses an external `ms365_calendars_<entity_name>.yaml` file which is stored in the `ms365_storage` directory. Much of this can be managed by the UI, but more complex items must be managed via the yaml file. Items that can be set in the integration's options (**Configure**) are:
 * name
 * track
 * end_offset
 * start_offset
 * max_results
+* search, exclude, sensitivity_exclude, exclude_declined and show_as_exclude, in the **Filters** section of each calendar, see [Filters in the options](#filters-in-the-options)
 
-Group calendars plus device_id, search, exclude, sensitivity_exclude, exclude_declined and show_as_exclude must be managed via the yaml file.
+Group calendars and device_id must be managed via the yaml file.
 
 The integration reads the calendars of the account when it starts or is reloaded. A calendar that is not in the file yet is added at the end, with `name` and `device_id` set to the calendar's name, `start_offset: 0`, `end_offset: 24` and `track` set by the `track_new_calendar` option (Enable new calendars). A calendar that has been removed from MS365 is removed from the file and its entity is deleted. Group calendars are never removed. Only the first 50 calendars of the account are read. Calendars past those are not added, but you can add them to the file by hand with their `cal_id` and an `entities` entry. When 50 calendars come back, none are removed from the file. Changes to the file are read when the integration is reloaded or Home Assistant restarts. When a calendar is removed from the file this way, or the options are saved, the file is written again, so comments in it are lost. Removing the integration deletes the file.
 
@@ -57,7 +58,25 @@ Key | Type | Required | Description
 `exclude_declined` | `boolean` | `False` | True=Exclude the events the calendar's owner has declined (on your own calendars, the events you have declined). Default is false
 `show_as_exclude` | `list[string]` | `False` | List of show as values to exclude from the calendar (`free`/`tentative`/`busy`/`oof`/`workingElsewhere`/`unknown`)
 
-If the settings of a calendar in the file are not valid, for example `sensitivity_exclude: Private` (write the sensitivity values in lower case as listed; unlike `show_as_exclude`, the names shown in the event data are not accepted), a `show_as_exclude` value MS365 does not have, or `exclude` given as a single string instead of a list, the warning `Invalid Data - duplicate entries may be created in file` is logged. The whole calendar entry, with all its entities, is then skipped and no entity is created from it. If it is a calendar the integration finds in your account, a new entry for it is added at the end of the file when the integration starts or is reloaded. That entry has the calendar's MS365 name as `name` and `device_id`, the default offsets, none of your other settings, and `track` set by the Enable new calendars option. The entity is then set up from that new entry, so it can have a different entity_id from the one you configured, or no entity at all if Enable new calendars is off. To fix it, correct your entry and delete the added one: while both are in the file, the last one is used.
+If the settings of a calendar in the file are not valid, for example `sensitivity_exclude: Private` (write the sensitivity values in lower case as listed; unlike `show_as_exclude`, the names shown in the event data are not accepted), a `show_as_exclude` value MS365 does not have, or `exclude` given as a single string instead of a list, the warning `Invalid Data - duplicate entries may be created in file` is logged. It names the calendar by its `cal_id` and the names of its entities, and says what is not valid and where, for example `expected EventShowAs or one of 'free', 'tentative', 'busy', 'oof', 'working_elsewhere', 'unknown' at 'entities[0].show_as_exclude[1]'` for the second `show_as_exclude` value of the first entity. The whole calendar entry, with all its entities, is then skipped and no entity is created from it. If it is a calendar the integration finds in your account, a new entry for it is added at the end of the file when the integration starts or is reloaded. That entry has the calendar's MS365 name as `name` and `device_id`, the default offsets, none of your other settings, and `track` set by the Enable new calendars option. The entity is then set up from that new entry, so it can have a different entity_id from the one you configured, or no entity at all if Enable new calendars is off. To fix it, correct your entry and delete the added one: while both are in the file, the last one is used.
+
+## Filters in the options
+
+The filters of each calendar can also be set in the integration's options. Select **Configure**, then open the **Filters** section on the form of the calendar. It is filled in from the calendar's entry in the file:
+
+Field | Setting
+-- | --
+Only events with this text in the subject | `search`
+Exclude events whose subject matches | `exclude`, one regular expression per entry
+Exclude events with sensitivity | `sensitivity_exclude`
+Exclude declined events | `exclude_declined`
+Exclude events shown as | `show_as_exclude`
+
+Saving the options writes the filters into the calendar's entry and reloads the integration, so they apply straight away, also when nothing else was changed. A filter that is cleared, or set to its default (no text, no entries, nothing selected, or Exclude declined events off), is removed from the entry, so the calendar works as if the filter had never been set. The other settings in the file are kept. `show_as_exclude` is written as MS365 names the values, such as `workingElsewhere`.
+
+Each exclude must be a valid regular expression. If one is not, the form is shown again with an error that names it, and nothing is saved until it is corrected. Empty entries are removed.
+
+A value the file does not accept, such as `sensitivity_exclude: Private` or a `show_as_exclude` value MS365 does not have, is not shown in the form, so it is removed from the file when the form of that calendar is saved. A single `exclude` given as text instead of a list is shown as one entry, and saved as a list.
 
 ## Group calendars
 
@@ -90,7 +109,7 @@ To exclude calendar items from being displayed, the exclude attribute can be use
      - "^In.*Junk$"
 ```
 
-Each item is used as a regex, so characters such as `[ ] ( ) . * + ?` have their regex meaning; to match them as text, escape them with `\` inside single quotes, e.g. `'\[External\]'`. An item that is not a valid regex, such as `"(Optional"`, is matched as plain text and a warning is logged.
+Each item is used as a regex, so characters such as `[ ] ( ) . * + ?` have their regex meaning; to match them as text, escape them with `\` inside single quotes, e.g. `'\[External\]'`. An item that is not a valid regex, such as `"(Optional"`, is matched as plain text and a warning is logged. The options do not save such an item, see [Filters in the options](#filters-in-the-options).
 
 Matching is case sensitive. To ignore case, start the item with `(?i)`, e.g. `'(?i)^private'`. It must be at the very start: placed later, as in `'^(?i)private'`, the item is not a valid regex and is matched as plain text.
 
