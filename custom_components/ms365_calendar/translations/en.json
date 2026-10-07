@@ -226,6 +226,10 @@
           "description": "Set whether event is all day (optional)",
           "name": "All Day"
         },
+        "rrule": {
+          "description": "Make the event repeat, with an RFC 5545 RRULE without RRULE: in front, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10. The documentation lists the rules MS365 supports (optional)",
+          "name": "Repeat rule"
+        },
         "attendees": {
           "description": "List of attendees formatted as email: example@example.com type: Required, Optional, or Resource (optional)",
           "name": "Attendees"
