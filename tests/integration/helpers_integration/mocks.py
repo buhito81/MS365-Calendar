@@ -118,6 +118,18 @@ class MS365Mocks:
             end=(utcnow() + timedelta(days=1)).strftime("%Y-%m-%d"),
         )
 
+    def response_event_mocks(self, requests_mock):
+        """Create the mocks for events with each response and show as."""
+        _generic_mocks(requests_mock)
+        mock_call(
+            requests_mock,
+            URL.CALENDARS,
+            "calendar1_calendar_view_responses",
+            "calendar1/calendarView",
+            start=(utcnow() - timedelta(days=1)).strftime("%Y-%m-%d"),
+            end=(utcnow() + timedelta(days=1)).strftime("%Y-%m-%d"),
+        )
+
     def started_event_mocks(self, requests_mock):
         """Create the standard mocks."""
         _generic_mocks(requests_mock)
