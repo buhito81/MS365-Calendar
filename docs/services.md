@@ -49,6 +49,7 @@ calendar.user_primary:
 
 #### Example get events service call
 
+{% raw %}
 ```yaml
 action: ms365_calendar.get_calendar_events
 target:
@@ -58,6 +59,7 @@ data:
   end_date_time: "{{ (now() + timedelta(days=3)).isoformat() }}"
 response_variable: events
 ```
+{% endraw %}
 
 The response is keyed by entity: `events['calendar.user_primary'].events` is a list of events, each with `summary`, `start`, `end`, `all_day`, `description`, `location`, `location_details`, `locations`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees` and `uid`. `response` is the calendar owner's response to the event: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or `null` when MS365 has no response for it. On your own calendars this is your own response; for shared and group calendars, see [Sensors](./sensor.md). `location_details` and `locations` are described under [location details](./sensor.md#location-details).
 
