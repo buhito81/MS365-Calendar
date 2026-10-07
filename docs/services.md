@@ -15,7 +15,7 @@ Remove an event in the specified calendar - All parameters are shown in the avai
 ### ms365_calendar.respond_calendar_event
 Respond to an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Services tab. Not possible for group calendars.
 ### ms365_calendar.get_calendar_events
-Get the events in a time range, with the same per-event detail as the calendar entity's `data` attribute - including `attendees` (email, type, response status), `organizer`, `categories`, `sensitivity`, `show_as` and `uid`. Use it with `response_variable`. Unlike the core `calendar.get_events` action, which only returns summary, start, end, description and location, and unlike the `data` attribute, which only covers the entity's `start_offset`/`end_offset` window.
+Get the events in a time range, with the same per-event detail as the calendar entity's `data` attribute - including `attendees` (email, type, response status), `organizer`, `categories`, `sensitivity`, `show_as`, `uid` and the [location details](./sensor.md#location-details) (address, coordinates, type, room email and each place of an event held in several). Use it with `response_variable`. Unlike the core `calendar.get_events` action, which only returns summary, start, end, description and location, and unlike the `data` attribute, which only covers the entity's `start_offset`/`end_offset` window.
 
 #### Example create event service call
 
@@ -57,4 +57,39 @@ data:
 response_variable: events
 ```
 
-The response is keyed by entity: `events['calendar.user_primary'].events` is a list of events, each with `summary`, `start`, `end`, `all_day`, `description`, `location`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `attendees` and `uid`.
+The response is keyed by entity: `events['calendar.user_primary'].events` is a list of events, each with `summary`, `start`, `end`, `all_day`, `description`, `location`, `location_details`, `locations`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `attendees` and `uid`. `location_details` and `locations` are described under [location details](./sensor.md#location-details).
+
+```yaml
+calendar.user_primary:
+  events:
+    - summary: Coffee with Alex
+      start: "2025-03-01T10:00:00+01:00"
+      end: "2025-03-01T11:00:00+01:00"
+      all_day: false
+      description: ""
+      location: Fourth Coffee
+      location_details:
+        address:
+          street: 4567 Main St
+          city: Redmond
+          state: WA
+          postal_code: "98052"
+          country: United States
+        coordinates:
+          latitude: 47.672
+          longitude: -122.103
+        type: local_business
+      locations: null
+      categories: []
+      sensitivity: Normal
+      show_as: Busy
+      reminder:
+        minutes: 15
+        is_on: true
+      organizer: alex@example.com
+      attendees:
+        - email: me@example.com
+          type: required
+          status: accepted
+      uid: long_guid
+```
