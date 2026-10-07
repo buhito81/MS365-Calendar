@@ -49,7 +49,7 @@ calendar.user_primary:
 
 #### Repeating events
 
-`rrule` makes the created event the first of a series. It takes an RFC 5545 RRULE value without `RRULE:` in front, the same format as the repeat rule of an event in the Home Assistant calendar. The series starts on the date of `start`, and every occurrence has the time and length of the event.
+`rrule` makes the created event the first of a series. It takes an RFC 5545 RRULE value without `RRULE:` in front and with no spaces between its parts, the same format as the repeat rule of an event in the Home Assistant calendar. The series starts on the date of `start`, and every occurrence has the time and length of the event.
 
 ```yaml
 action: ms365_calendar.create_calendar_event

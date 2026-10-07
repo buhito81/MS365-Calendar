@@ -187,7 +187,8 @@ def add_call_data_to_event(event, subject, start, end, **kwargs):
     _add_attendees(kwargs.get(ATTR_ATTENDEES, []), event)
     _add_all_day(is_all_day, event)
 
-    if rrule := kwargs.get(ATTR_RRULE):
+    # A rule written as a YAML block ends in a line break
+    if rrule := (kwargs.get(ATTR_RRULE) or "").strip():
         _validate_rrule(rrule)
         _rrule_processing(event, rrule)
     return event
@@ -274,6 +275,9 @@ def _validate_rrule(rrule):
     The rule is parsed as the HA calendar parses it. MS Graph only has some kinds of
     series, so anything else is refused rather than creating a different series.
     """
+    if any(char.isspace() for char in rrule):
+        # dateutil reads what follows a space as another rule, which has no FREQ
+        raise _rrule_error("rrule_space", rrule)
     rules = {}
     for item in rrule.split(";"):
         key, _, value = item.partition("=")
@@ -282,7 +286,7 @@ def _validate_rrule(rrule):
         raise _rrule_error("rrule_no_freq", rrule)
     try:
         rrulestr(rrule)
-    except ValueError as err:
+    except (ValueError, OverflowError) as err:
         raise _rrule_error("rrule_invalid", rrule, error=str(err)) from err
     if part := _unsupported_rrule_part(rules):
         raise _rrule_error("rrule_not_supported", rrule, part=part)

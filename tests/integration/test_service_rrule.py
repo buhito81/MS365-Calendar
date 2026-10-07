@@ -134,6 +134,18 @@ async def _async_create_event(hass, data):
             {"type": "daily", "interval": 3},
             {"type": "endDate", "startDate": "2099-01-05", "endDate": "2099-01-19"},
         ),
+        # A rule written as a YAML block ends in a line break
+        (
+            _timed("2099-01-05T18:00:00-08:00", "2099-01-05T19:00:00-08:00"),
+            "FREQ=WEEKLY;BYDAY=MO,WE\n",
+            {
+                "type": "weekly",
+                "interval": 1,
+                "daysOfWeek": ["monday", "wednesday"],
+                "firstDayOfWeek": "sunday",
+            },
+            {"type": "noEnd", "startDate": "2099-01-05"},
+        ),
     ],
 )
 async def test_create_event_with_rrule(
@@ -157,7 +169,7 @@ async def test_create_event_with_rrule(
     }
 
 
-@pytest.mark.parametrize("data", [{}, {"rrule": ""}])
+@pytest.mark.parametrize("data", [{}, {"rrule": ""}, {"rrule": "\n"}])
 async def test_create_event_without_rrule(
     hass: HomeAssistant,
     setup_update_integration,
@@ -258,6 +270,19 @@ async def test_create_event_rrule_not_supported(
             "FREQ=DAILY;UNTIL=someday",
             "Repeat rule FREQ=DAILY;UNTIL=someday is not valid: invalid 'UNTIL': SOMEDAY",
         ),
+        # dateutil reads what follows a space as another rule, which has no FREQ
+        (
+            "FREQ=WEEKLY BYDAY=MO",
+            "Repeat rule FREQ=WEEKLY BYDAY=MO has a space or line break in it. Separate its parts with ; and no spaces, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10",
+        ),
+        (
+            "FREQ=WEEKLY;COUNT=10\nBYDAY=MO,WE",
+            "Repeat rule FREQ=WEEKLY;COUNT=10\nBYDAY=MO,WE has a space or line break in it. Separate its parts with ; and no spaces, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10",
+        ),
+        (
+            "FREQ=DAILY;INTERVAL=2 FREQ=WEEKLY",
+            "Repeat rule FREQ=DAILY;INTERVAL=2 FREQ=WEEKLY has a space or line break in it. Separate its parts with ; and no spaces, such as FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10",
+        ),
     ],
 )
 async def test_create_event_rrule_invalid(
@@ -277,6 +302,26 @@ async def test_create_event_rrule_invalid(
         )
 
     assert str(exc_info.value) == message
+    assert not mock_save.called
+
+
+async def test_create_event_rrule_out_of_range(
+    hass: HomeAssistant,
+    setup_update_integration,
+) -> None:
+    """Test create event - a date too large to read is refused as not valid."""
+    rrule = "FREQ=DAILY;UNTIL=99999999999999999999"
+    with (
+        patch("O365.calendar.Event.save", autospec=True) as mock_save,
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await _async_create_event(
+            hass,
+            {**_all_day("2099-01-05", "2099-01-06"), "rrule": rrule},
+        )
+
+    # The reason is Python's own text, which differs between versions
+    assert str(exc_info.value).startswith(f"Repeat rule {rrule} is not valid: ")
     assert not mock_save.called
 
 
