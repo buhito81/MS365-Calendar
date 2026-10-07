@@ -6,14 +6,16 @@ nav_order: 15
 # Services
 
 ##  Calendar Services
+The create, modify, remove and respond actions are only available when `enable_update` is set, see [Installation and Configuration](./installation_and_configuration.md), and they only work on calendars you can edit. `get_calendar_events` is always available.
+
 ### ms365_calendar.create_calendar_event
-Create an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Services tab.
+Create an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Actions tab.
 ### ms365_calendar.modify_calendar_event
-Modify an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Services tab. Not possible for group calendars.
+Modify an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Actions tab. Not possible for group calendars.
 ### ms365_calendar.remove_calendar_event
-Remove an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Services tab. Not possible for group calendars.
+Remove an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Actions tab. Not possible for group calendars.
 ### ms365_calendar.respond_calendar_event
-Respond to an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Services tab. Not possible for group calendars.
+Respond to an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Actions tab. Not possible for group calendars.
 ### ms365_calendar.get_calendar_events
 Get the events in a time range, with the same per-event detail as the calendar entity's `data` attribute - including `attendees` (email, type, response status), `organizer`, the calendar owner's `response`, `categories`, `sensitivity`, `show_as`, `uid` and the [location details](./sensor.md#location-details) (address, coordinates, type, room email and each place of an event held in several). Use it with `response_variable`. Unlike the core `calendar.get_events` action, which only returns summary, start, end, description and location, and unlike the `data` attribute, which only covers the entity's `start_offset`/`end_offset` window. Events left out by the calendar's exclude settings, such as `exclude_declined` and `show_as_exclude`, are left out here too.
 

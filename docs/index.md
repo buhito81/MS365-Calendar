@@ -18,5 +18,5 @@ The general guidance for all the integrations can be found on the MS365 Home Ass
 # Microsoft 365 Calendar Integration for Home Assistant
 
 This integration enables:
-1. Getting, creating, updating and responding to calendar events
+1. Getting, creating, updating, deleting and responding to calendar events
 
