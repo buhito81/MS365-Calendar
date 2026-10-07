@@ -13,6 +13,7 @@ from requests_mock import Mocker
 
 from .const import ENTITY_NAME, TOKEN_LOCATION
 from .helpers.mock_config_entry import MS365MockConfigEntry
+from .helpers.reauth import reauth_flows, reauth_issue
 from .helpers.utils import build_token_file
 from .integration.const_integration import (
     BASE_TOKEN_PERMS,
@@ -80,6 +81,31 @@ async def test_invalid_client_2(
         await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
     assert "Token error for account" in caplog.text
+
+
+@pytest.mark.parametrize("description", ["client secret expired", "token error"])
+async def test_invalid_client_starts_reauth(
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+    issue_registry: ir.IssueRegistry,
+    description,
+) -> None:
+    """Test a client the login service refuses starts re-authentication."""
+    MS365MOCKS.standard_mocks(requests_mock)
+    base_config_entry.add_to_hass(hass)
+
+    with patch(
+        "O365.Account.get_current_user_data",
+        side_effect=InvalidClientError(description=description),
+    ):
+        await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert base_config_entry.state is ConfigEntryState.SETUP_ERROR
+    assert len(reauth_flows(hass, base_config_entry)) == 1
+    assert list(issue_registry.issues) == [reauth_issue(base_config_entry)]
 
 
 async def test_legacy_token(

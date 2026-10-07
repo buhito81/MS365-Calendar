@@ -1,6 +1,7 @@
 {
   "config": {
     "abort": {
+      "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Re-configuration was successful"
     },
     "error": {
@@ -58,6 +59,10 @@
         "title": "Authorization Required - {entity_name}",
         "description": "To link your MS365 account, click the link, login, and authorize:\n\n[Link MS365 account]({auth_url}){failed_permissions}",
         "submit": "I authorized successfully"
+      },
+      "reauth_confirm": {
+        "title": "Re-authentication required - {entity_name}",
+        "description": "The token for {entity_name} is no longer accepted, for example because it has expired or because the client secret has expired. Submit to enter the Entra ID App Registration credentials again and re-authenticate. If the client secret has expired, first create a new client secret in the App Registration and enter its value."
       }
     }
   },
@@ -122,6 +127,9 @@
     }
   },
   "exceptions": {
+    "authentication_failed": {
+      "message": "The token or the client secret is no longer accepted, please re-authenticate"
+    },
     "connection_failed": {
       "message": "Unable to connect to MS Graph: {error}"
     },
