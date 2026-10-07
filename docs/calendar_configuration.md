@@ -52,7 +52,7 @@ Key | Type | Required | Description
 `end_offset` | `integer` | `False` | Number of hours to offset the end time to search for events for (negative numbers to offset into the past).
 `max_results` | `integer` | `False` | Max number of events in the `data` attribute. Default is no limit.
 `sensitivity_exclude` | `list[string]` | `False` | List of sensitivities to exclude from the calendar (`normal`/`personal`/`private`/`confidential`)
-`exclude_declined` | `boolean` | `False` | True=Exclude the events you have declined. Default is false
+`exclude_declined` | `boolean` | `False` | True=Exclude the events the calendar's owner has declined (on your own calendars, the events you have declined). Default is false
 `show_as_exclude` | `list[string]` | `False` | List of show as values to exclude from the calendar (`free`/`tentative`/`busy`/`oof`/`workingElsewhere`/`unknown`)
 
 ## Group calendars
@@ -99,7 +99,7 @@ To exclude specific sensitivities from being included in the calendar.
 
 ## Exclude Declined
 
-Events you have declined can stay on your calendar. To exclude them, set `exclude_declined` to `true`. Your own response to each event is shown in its `response` field, see [Sensors](./sensor.md).
+Events you have declined can stay on your calendar. To exclude them, set `exclude_declined` to `true`. This uses the response of the calendar's owner, which is shown in the `response` field of each event, see [Sensors](./sensor.md). On your own calendars that is your own response. On a calendar someone else has shared with you, or with `shared_mailbox`, it hides the events that person has declined, not the ones you have declined. On a group calendar the response is the group's, usually `organizer`, so it hides nothing there.
 
 ```yaml
     exclude_declined: true

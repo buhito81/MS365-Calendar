@@ -15,7 +15,7 @@ Remove an event in the specified calendar - All parameters are shown in the avai
 ### ms365_calendar.respond_calendar_event
 Respond to an event in the specified calendar - All parameters are shown in the available parameter list on the Developer Tools/Services tab. Not possible for group calendars.
 ### ms365_calendar.get_calendar_events
-Get the events in a time range, with the same per-event detail as the calendar entity's `data` attribute - including `attendees` (email, type, response status), `organizer`, your own `response`, `categories`, `sensitivity`, `show_as` and `uid`. Use it with `response_variable`. Unlike the core `calendar.get_events` action, which only returns summary, start, end, description and location, and unlike the `data` attribute, which only covers the entity's `start_offset`/`end_offset` window. Events left out by the calendar's exclude settings, such as `exclude_declined` and `show_as_exclude`, are left out here too.
+Get the events in a time range, with the same per-event detail as the calendar entity's `data` attribute - including `attendees` (email, type, response status), `organizer`, the calendar owner's `response`, `categories`, `sensitivity`, `show_as` and `uid`. Use it with `response_variable`. Unlike the core `calendar.get_events` action, which only returns summary, start, end, description and location, and unlike the `data` attribute, which only covers the entity's `start_offset`/`end_offset` window. Events left out by the calendar's exclude settings, such as `exclude_declined` and `show_as_exclude`, are left out here too.
 
 #### Example create event service call
 
@@ -57,4 +57,4 @@ data:
 response_variable: events
 ```
 
-The response is keyed by entity: `events['calendar.user_primary'].events` is a list of events, each with `summary`, `start`, `end`, `all_day`, `description`, `location`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees` and `uid`. `response` is your own response to the event: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or `null` when MS365 has no response for it.
+The response is keyed by entity: `events['calendar.user_primary'].events` is a list of events, each with `summary`, `start`, `end`, `all_day`, `description`, `location`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees` and `uid`. `response` is the calendar owner's response to the event: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or `null` when MS365 has no response for it. On your own calendars this is your own response; for shared and group calendars, see [Sensors](./sensor.md).
