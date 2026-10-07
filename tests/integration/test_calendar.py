@@ -19,9 +19,13 @@ from zoneinfo import ZoneInfo
 from ..helpers.mock_config_entry import MS365MockConfigEntry
 from ..helpers.utils import check_entity_state, mock_call, utcnow
 from .const_integration import DOMAIN, FULL_INIT_ENTITY_NO, URL
-from .data_integration.state import BASE_STATE_CAL1, BASE_STATE_CAL2
+from .data_integration.state import BASE_STATE_CAL1, BASE_STATE_CAL2, LOCATION_STATE
 from .helpers_integration.mocks import MS365MOCKS
-from .helpers_integration.utils_integration import update_options, yaml_setup
+from .helpers_integration.utils_integration import (
+    location_fields,
+    update_options,
+    yaml_setup,
+)
 
 START_BASE = datetime(2020, 1, 1, 0, 0, 0, tzinfo=ZoneInfo(key="UTC"))
 END_BASE = datetime(2020, 1, 2, 23, 59, 59, tzinfo=ZoneInfo(key="UTC"))
@@ -397,6 +401,27 @@ async def test_not_started_event(
         "off",
         attributes={"message": "Test not started"},
     )
+
+
+@pytest.mark.parametrize(
+    "setup_base_integration", [{"method_name": "location_event_mocks"}], indirect=True
+)
+async def test_location_details(
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    setup_base_integration,
+) -> None:
+    """Test the data attribute has the address, coordinates, room and each place."""
+    data = hass.states.get("calendar.test_calendar1").attributes["data"]
+    assert location_fields(data) == LOCATION_STATE
+
+    # MS Graph only sends the places of an event when asked for them
+    calendar_view = next(
+        request
+        for request in requests_mock.request_history
+        if "calendarview" in request.url.lower()
+    )
+    assert "locations" in calendar_view.qs["$select"][0].split(",")
 
 
 def _adjust_date(data, adddays_start=0, adddays_end=0):

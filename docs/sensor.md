@@ -9,4 +9,61 @@ The status of the calendar sensor indicates (on/off) whether there is an event o
 
 The `data` attribute provides an array of events for the period defined by the `start_offset` and `end_offset` in `ms365_calendars_<entity_name>.yaml`. Individual array elements can be accessed using the template notation `states.calendar.<entity_name>_calendar.attributes.data[0...n]`.
 
-Each event has `summary`, `start`, `end`, `all_day`, `description`, `location`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees` and `uid`. `response` is the calendar owner's response to the event, in the same form as the `status` of each attendee: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or empty (`null`) when MS365 has no response for it. On your own calendars this is your own response. On a calendar someone else has shared with you, or with `shared_mailbox`, it is the response of the person whose calendar it is, not yours. On a group calendar it is the group's, which is usually `organizer`. Events the owner has declined can be left out with `exclude_declined`, see [Calendar configuration](./calendar_configuration.md#exclude-declined).
+Each event has `summary`, `start`, `end`, `all_day`, `description`, `location`, `location_details`, `locations`, `categories`, `sensitivity`, `show_as`, `reminder`, `organizer`, `response`, `attendees` and `uid`. `response` is the calendar owner's response to the event, in the same form as the `status` of each attendee: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or empty (`null`) when MS365 has no response for it. On your own calendars this is your own response. On a calendar someone else has shared with you, or with `shared_mailbox`, it is the response of the person whose calendar it is, not yours. On a group calendar it is the group's, which is usually `organizer`. Events the owner has declined can be left out with `exclude_declined`, see [Calendar configuration](./calendar_configuration.md#exclude-declined).
+
+### Location details
+
+`location` is the name of the place, as Outlook shows it. When MS Graph knows more about the place, such as for an address picked from the suggestions in Outlook or for a booked room, `location_details` has it, with only the parts that are filled in:
+
+- `address` - `street`, `city`, `state`, `postal_code` and `country`
+- `coordinates` - `latitude` and `longitude`
+- `type` - the kind of place, such as `conference_room`, `street_address`, `business_address` or `local_business`. A place typed in as plain text has no type
+- `email` - the email address of a room
+- `uri` - a link for the place
+
+`location_details` is `null` when there is nothing more than the name.
+
+An event can be held in several places, such as a room and a home office. `location` then has all their names, separated by `; `, and `locations` lists each place with its `name` and the same details. For an event in one place, or none, `locations` is `null`.
+
+```yaml
+location: Fourth Coffee
+location_details:
+  address:
+    street: 4567 Main St
+    city: Redmond
+    state: WA
+    postal_code: "98052"
+    country: United States
+  coordinates:
+    latitude: 47.672
+    longitude: -122.103
+  type: local_business
+locations: null
+```
+
+```yaml
+location: Room 1; Head office
+location_details: null
+locations:
+  - name: Room 1
+    type: conference_room
+    email: room1@example.com
+  - name: Head office
+    address:
+      street: 1 Station Square
+      city: Utrecht
+      postal_code: 3511 ED
+      country: Netherlands
+```
+
+For example, this template gives the address of the first event as one line, such as for a travel time to it. It gives nothing when there is no event in the period, or no address:
+
+{% raw %}
+```
+{% set events = state_attr('calendar.user_primary', 'data') or [] %}
+{% set details = events[0].location_details if events else none %}
+{% if details and details.address is defined %}
+  {{ details.address.values() | join(', ') }}
+{% endif %}
+```
+{% endraw %}
