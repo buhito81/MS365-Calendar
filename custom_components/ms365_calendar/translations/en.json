@@ -97,8 +97,31 @@
           "start_offset": "Hours to offset the start time",
           "max_results": "Max number of events in the data attribute"
         },
-        "description": "Setup options for {entity_name} - calendar device_id {device_id}"
+        "description": "Setup options for {entity_name} - calendar device_id {device_id}",
+        "sections": {
+          "filters": {
+            "name": "Filters",
+            "description": "Leave events out of this calendar entity",
+            "data": {
+              "search": "Only events with this text in the subject",
+              "exclude": "Exclude events whose subject matches",
+              "sensitivity_exclude": "Exclude events with sensitivity",
+              "exclude_declined": "Exclude declined events",
+              "show_as_exclude": "Exclude events shown as"
+            },
+            "data_description": {
+              "search": "Enter the text as it appears in the subject. Leave empty for all events",
+              "exclude": "Regular expressions, each matched against the subject, case sensitive unless it starts with (?i). Empty entries are removed",
+              "sensitivity_exclude": "Leave out the events with one of these sensitivities",
+              "exclude_declined": "Leave out the events the calendar's owner has declined. On your own calendars, these are the events you have declined",
+              "show_as_exclude": "Leave out the events that show as one of these in the calendar"
+            }
+          }
+        }
       }
+    },
+    "error": {
+      "invalid_exclude": "Exclude \"{pattern}\" is not a valid regular expression: {error}"
     },
     "abort": {
       "no_calendars": "No calendars have been found for this account yet. Make sure the integration has set up successfully, then try again."
@@ -120,6 +143,26 @@
     "permissions": {
       "title": "Re-authentication required - {domain} - {entity_name}",
       "description": "Permissions missing. Please [Reconfigure]({url}) the integration and re-authenticate to re-create the token file."
+    }
+  },
+  "selector": {
+    "sensitivity_exclude": {
+      "options": {
+        "normal": "Normal",
+        "personal": "Personal",
+        "private": "Private",
+        "confidential": "Confidential"
+      }
+    },
+    "show_as_exclude": {
+      "options": {
+        "free": "Free",
+        "tentative": "Tentative",
+        "busy": "Busy",
+        "oof": "Away (out of office)",
+        "working_elsewhere": "Working elsewhere",
+        "unknown": "Unknown"
+      }
     }
   },
   "exceptions": {

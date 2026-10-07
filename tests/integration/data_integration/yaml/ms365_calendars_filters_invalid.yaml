@@ -1,0 +1,14 @@
+- cal_id: calendar1
+  entities:
+  - device_id: Calendar1
+    end_offset: 24
+    exclude: Holiday
+    exclude_declined: maybe
+    name: Calendar1
+    search:
+    sensitivity_exclude: Private
+    show_as_exclude:
+    - away
+    - Busy
+    start_offset: 0
+    track: true

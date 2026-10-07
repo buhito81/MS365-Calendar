@@ -1,6 +1,7 @@
 """Configuration flow for the MS365 platform."""
 
 from copy import deepcopy
+import re
 
 import voluptuous as vol
 
@@ -10,7 +11,19 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import section
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.selector import BooleanSelector
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+)
+from O365.calendar import (  # pylint: disable=no-name-in-module
+    EventSensitivity,
+    EventShowAs,
+)
+from O365.utils import to_camel_case  # pylint: disable=no-name-in-module
 
 from ..classes.config_entry import MS365ConfigEntry
 from ..const import CONF_ENABLE_UPDATE, CONF_ENTITY_NAME, CONF_SHARED_MAILBOX
@@ -24,10 +37,16 @@ from .const_integration import (
     CONF_DAYS_FORWARD,
     CONF_DEVICE_ID,
     CONF_ENTITIES,
+    CONF_EXCLUDE,
+    CONF_EXCLUDE_DECLINED,
+    CONF_FILTERS,
     CONF_GROUPS,
     CONF_HOURS_BACKWARD_TO_GET,
     CONF_HOURS_FORWARD_TO_GET,
     CONF_MAX_RESULTS,
+    CONF_SEARCH,
+    CONF_SENSITIVITY_EXCLUDE,
+    CONF_SHOW_AS_EXCLUDE,
     CONF_TRACK,
     CONF_TRACK_NEW_CALENDAR,
     CONF_UPDATE_INTERVAL,
@@ -45,9 +64,35 @@ from .filemgmt_integration import (
     write_calendar_yaml_file,
     write_yaml_file,
 )
+from .schema_integration import SENSITIVITY_VALUE, SHOW_AS_VALUE
 from .utils_integration import async_delete_calendar
 
 BOOLEAN_SELECTOR = BooleanSelector()
+SENSITIVITY_OPTIONS = [sensitivity.value for sensitivity in EventSensitivity]
+SHOW_AS_OPTIONS = [show_as.value for show_as in EventShowAs]
+FILTERS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_SEARCH): TextSelector(),
+        vol.Optional(CONF_EXCLUDE): TextSelector(TextSelectorConfig(multiple=True)),
+        vol.Optional(CONF_SENSITIVITY_EXCLUDE): SelectSelector(
+            SelectSelectorConfig(
+                options=SENSITIVITY_OPTIONS,
+                multiple=True,
+                mode=SelectSelectorMode.LIST,
+                translation_key=CONF_SENSITIVITY_EXCLUDE,
+            )
+        ),
+        vol.Optional(CONF_EXCLUDE_DECLINED, default=False): BOOLEAN_SELECTOR,
+        vol.Optional(CONF_SHOW_AS_EXCLUDE): SelectSelector(
+            SelectSelectorConfig(
+                options=SHOW_AS_OPTIONS,
+                multiple=True,
+                mode=SelectSelectorMode.LIST,
+                translation_key=CONF_SHOW_AS_EXCLUDE,
+            )
+        ),
+    }
+)
 
 
 def integration_reconfigure_schema(entry_data):
@@ -197,64 +242,74 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_calendar_config(self, user_input=None) -> ConfigFlowResult:
         """Handle calendar setup."""
         if user_input is not None:
-            for calendar in self._calendars:
-                for entity in calendar[CONF_ENTITIES]:
-                    if (
-                        entity[CONF_DEVICE_ID]
-                        == self._calendar_list_selected[self._calendar_no - 1]
-                    ):
-                        add_attribute_to_item(entity, user_input, CONF_NAME)
-                        add_attribute_to_item(
-                            entity, user_input, CONF_HOURS_FORWARD_TO_GET
-                        )
-                        add_attribute_to_item(
-                            entity, user_input, CONF_HOURS_BACKWARD_TO_GET
-                        )
-                        add_attribute_to_item(entity, user_input, CONF_MAX_RESULTS)
-                        return await self.async_step_calendar_config()
+            calendar_item = self._get_calendar_item()
+            # A form without the filters, as sent before they were added, keeps them
+            filters = user_input.get(CONF_FILTERS)
+            if filters is not None and (invalid := _invalid_exclude(filters)):
+                # Shown again with the input, so the pattern can be corrected
+                return self._show_calendar_config(
+                    calendar_item, user_input, filters, invalid
+                )
+            add_attribute_to_item(calendar_item, user_input, CONF_NAME)
+            add_attribute_to_item(calendar_item, user_input, CONF_HOURS_FORWARD_TO_GET)
+            add_attribute_to_item(calendar_item, user_input, CONF_HOURS_BACKWARD_TO_GET)
+            add_attribute_to_item(calendar_item, user_input, CONF_MAX_RESULTS)
+            if filters is not None:
+                _save_filters(calendar_item, filters)
+            return await self.async_step_calendar_config()
 
         if self._calendar_no == len(self._calendar_list_selected):
             return await self._async_tidy_up(self._user_input)
 
+        self._calendar_no += 1
         calendar_item = self._get_calendar_item()
-        last_step = self._calendar_no == len(self._calendar_list_selected)
+        return self._show_calendar_config(
+            calendar_item, calendar_item, _form_filters(calendar_item)
+        )
+
+    def _show_calendar_config(self, calendar_item, values, filters, invalid=None):
+        """Show the form of a calendar, filled with the values and filters."""
         return self.async_show_form(
             step_id="calendar_config",
             description_placeholders={
                 CONF_ENTITY_NAME: self.config_entry.data[CONF_ENTITY_NAME],
                 CONF_DEVICE_ID: calendar_item[CONF_DEVICE_ID],
+                **(invalid or {}),
             },
             data_schema=vol.Schema(
                 {
                     vol.Required(
                         CONF_NAME,
-                        default=calendar_item[CONF_NAME],
+                        default=values[CONF_NAME],
                     ): cv.string,
                     vol.Required(
                         CONF_HOURS_FORWARD_TO_GET,
-                        default=calendar_item.get(
+                        default=values.get(
                             CONF_HOURS_FORWARD_TO_GET, DEFAULT_HOURS_FORWARD_TO_GET
                         ),
                     ): int,
                     vol.Required(
                         CONF_HOURS_BACKWARD_TO_GET,
-                        default=calendar_item.get(
+                        default=values.get(
                             CONF_HOURS_BACKWARD_TO_GET, DEFAULT_HOURS_BACKWARD_TO_GET
                         ),
                     ): int,
                     vol.Optional(
                         CONF_MAX_RESULTS,
-                        description={
-                            "suggested_value": calendar_item.get(CONF_MAX_RESULTS)
-                        },
+                        description={"suggested_value": values.get(CONF_MAX_RESULTS)},
                     ): cv.positive_int,
+                    vol.Optional(CONF_FILTERS): section(
+                        self.add_suggested_values_to_schema(FILTERS_SCHEMA, filters),
+                        # Open when a filter has to be corrected
+                        {"collapsed": not invalid},
+                    ),
                 }
             ),
-            last_step=last_step,
+            errors={CONF_FILTERS: "invalid_exclude"} if invalid else {},
+            last_step=self._calendar_no == len(self._calendar_list_selected),
         )
 
     def _get_calendar_item(self):
-        self._calendar_no += 1
         for calendar in self._calendars:
             for entity in calendar[CONF_ENTITIES]:
                 if (
@@ -288,3 +343,87 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
             # The update listener only reloads a loaded entry whose options changed
             self.hass.config_entries.async_schedule_reload(self._config_entry_id)
         return update
+
+
+def _form_filters(calendar_item):
+    """Get the filters of a calendar in the file, as the form shows them.
+
+    A value the file does not accept is left out, as the form has no place for it.
+    """
+    return {
+        CONF_SEARCH: _accepted(cv.string, calendar_item.get(CONF_SEARCH)),
+        CONF_EXCLUDE: _accepted_list(cv.string, calendar_item.get(CONF_EXCLUDE)),
+        CONF_SENSITIVITY_EXCLUDE: [
+            sensitivity.value
+            for sensitivity in _accepted_list(
+                SENSITIVITY_VALUE, calendar_item.get(CONF_SENSITIVITY_EXCLUDE)
+            )
+        ],
+        CONF_EXCLUDE_DECLINED: _accepted(
+            cv.boolean, calendar_item.get(CONF_EXCLUDE_DECLINED)
+        ),
+        CONF_SHOW_AS_EXCLUDE: [
+            show_as.value
+            for show_as in _accepted_list(
+                SHOW_AS_VALUE, calendar_item.get(CONF_SHOW_AS_EXCLUDE)
+            )
+        ],
+    }
+
+
+def _accepted(validator, value):
+    """Get a value as the file schema reads it, or None if it is not accepted."""
+    try:
+        return validator(value)
+    except vol.Invalid:
+        return None
+
+
+def _accepted_list(validator, values):
+    """Get the values of a list the file schema accepts, as it reads them."""
+    return [
+        accepted
+        for value in cv.ensure_list(values)
+        if (accepted := _accepted(validator, value)) is not None
+    ]
+
+
+def _excludes(filters):
+    """Get the exclude patterns, without the blank entries the form can send."""
+    return [exclude for exclude in filters.get(CONF_EXCLUDE, []) if exclude.strip()]
+
+
+def _invalid_exclude(filters):
+    """Find the first exclude that is not a valid regular expression."""
+    for exclude in _excludes(filters):
+        try:
+            re.compile(exclude)
+        except re.error as err:
+            return {"pattern": exclude, "error": str(err)}
+    return {}
+
+
+def _save_filters(calendar_item, filters):
+    """Write the filters into the calendar's entry of the file."""
+    search = filters.get(CONF_SEARCH, "")
+    sensitivities = filters.get(CONF_SENSITIVITY_EXCLUDE, [])
+    show_as_values = filters.get(CONF_SHOW_AS_EXCLUDE, [])
+    values = {
+        # Kept as typed, as spaces can be part of the text to search for
+        CONF_SEARCH: search if search.strip() else None,
+        CONF_EXCLUDE: _excludes(filters),
+        CONF_SENSITIVITY_EXCLUDE: [
+            value for value in SENSITIVITY_OPTIONS if value in sensitivities
+        ],
+        CONF_EXCLUDE_DECLINED: filters.get(CONF_EXCLUDE_DECLINED, False),
+        # As MS365 names them, such as workingElsewhere, like the documentation
+        CONF_SHOW_AS_EXCLUDE: [
+            to_camel_case(value) for value in SHOW_AS_OPTIONS if value in show_as_values
+        ],
+    }
+    for key, value in values.items():
+        if value:
+            calendar_item[key] = value
+        else:
+            # Left out when not set, so the file is as it was without the filter
+            calendar_item.pop(key, None)
