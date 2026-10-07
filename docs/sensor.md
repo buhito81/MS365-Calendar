@@ -54,11 +54,12 @@ locations:
       country: Netherlands
 ```
 
-For example, this template gives the address of the first event as one line, such as for a travel time to it:
+For example, this template gives the address of the first event as one line, such as for a travel time to it. It gives nothing when there is no event in the period, or no address:
 
 {% raw %}
 ```
-{% set details = state_attr('calendar.user_primary', 'data')[0].location_details %}
+{% set events = state_attr('calendar.user_primary', 'data') or [] %}
+{% set details = events[0].location_details if events else none %}
 {% if details and details.address is defined %}
   {{ details.address.values() | join(', ') }}
 {% endif %}
