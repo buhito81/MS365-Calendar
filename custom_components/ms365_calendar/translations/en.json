@@ -7,7 +7,7 @@
     "error": {
       "already_configured": "This account name has already been used. Use re-configure.",
       "error_authenticating": "Error authenticating, token invalid, check log for errors",
-      "invalid_url": "Error, the originating url does not seem to be a valid microsoft redirect",
+      "invalid_url": "Error, the returned url is missing or is not a valid microsoft redirect. With alternate authentication, complete the authorization in the link before submitting",
       "invalid_tenant": "Error, the sign-in details for the tenant could not be retrieved, check the Tenant ID in the advanced API options",
       "permissions": "Minimum permissions not granted for account: {entity_name}",
       "corrupted": "Token file is corrupted after successful authentication, check log for file system errors",
@@ -115,7 +115,7 @@
     },
     "outdated": {
       "title": "Re-authentication required - {domain} - {entity_name}",
-      "description": "The token is outdated. Please delete the token, then [Reconfigure]({url}) the integration and re-authenticate to re-create the token file."
+      "description": "The token is outdated. Please [Reconfigure]({url}) the integration and re-authenticate to re-create the token file."
     },
     "permissions": {
       "title": "Re-authentication required - {domain} - {entity_name}",
@@ -142,13 +142,10 @@
       "message": "Calendar - {name} - is not editable"
     },
     "ms365_group_calendar_error": {
-      "message": "O365 Python does not have capability to update/respond to group calendar events: {entity_id}"
+      "message": "O365 Python does not have capability to modify/delete/respond to group calendar events: {entity_id}"
     },
     "not_authorised": {
       "message": "Not authorised requires permission: {required_permission}"
-    },
-    "cannot_connect": {
-      "message": "Error syncing calendar events from MS Graph."
     },
     "end_before_start": {
       "message": "The end date time must be after the start date time"

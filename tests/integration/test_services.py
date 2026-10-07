@@ -551,7 +551,7 @@ async def test_update_group_calendar(
 
     assert (
         str(exc_info.value)
-        == f"O365 Python does not have capability to update/respond to group calendar events: {calendar_name}"
+        == f"O365 Python does not have capability to modify/delete/respond to group calendar events: {calendar_name}"
     )
 
 
@@ -1351,7 +1351,7 @@ async def test_delete_group_calendar(
 
     assert (
         str(exc_info.value)
-        == f"O365 Python does not have capability to update/respond to group calendar events: {calendar_name}"
+        == f"O365 Python does not have capability to modify/delete/respond to group calendar events: {calendar_name}"
     )
 
 
@@ -1476,7 +1476,7 @@ async def test_respond_group_calendar(
 
     assert (
         str(exc_info.value)
-        == f"O365 Python does not have capability to update/respond to group calendar events: {calendar_name}"
+        == f"O365 Python does not have capability to modify/delete/respond to group calendar events: {calendar_name}"
     )
 
 
