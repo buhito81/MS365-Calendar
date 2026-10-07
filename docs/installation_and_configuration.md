@@ -42,3 +42,26 @@ Key | Type | Required | Description
 `update_interval` | `integer` | `False` | How often in seconds that events will be retrieved and synced to store. Default 60. Range: 15 - 600
 `days_backward` | `integer` | `False` | The days backward from `now` for which events will be synced to store. Default -8. Range: -90 - 90
 `days_forward` | `integer` | `False` | The days forward from `now` for which events will be synced to store. Default 8. Range: -90 - 90
+
+### Calendar options
+
+After these options, a form is shown for each enabled calendar, filled in from its entry in the [calendars file](./calendar_configuration.md). Saving the options writes the calendars file and reloads the integration, so the changes apply straight away, also when only the settings of a calendar were changed.
+
+Key | Type | Required | Description
+-- | -- | -- | --
+`name` | `string` | `True` | The calendar friendly name.
+`end_offset` | `integer` | `True` | End of the period of the `data` attribute, in hours from now. Default 24
+`start_offset` | `integer` | `True` | Start of the period of the `data` attribute, in hours from now. Default 0
+`max_results` | `integer` | `False` | Max number of events in the `data` attribute. Default is no limit.
+
+#### Filters
+
+The collapsed **Filters** section of each calendar's form. A filter that is cleared is removed from the calendars file. See [Filters in the options](./calendar_configuration.md#filters-in-the-options).
+
+Key | Type | Required | Description
+-- | -- | -- | --
+`search` | `string` | `False` | Only get events whose subject contains this text.
+`exclude` | `list[string]` | `False` | Exclude events whose subject matches one of these regular expressions. Each must be a valid regular expression, or the form shows an error naming it.
+`sensitivity_exclude` | `list[string]` | `False` | Exclude events with one of these sensitivities (Normal, Personal, Private, Confidential).
+`exclude_declined` | `boolean` | `False` | Exclude the events the calendar's owner has declined. Default false
+`show_as_exclude` | `list[string]` | `False` | Exclude events that show as one of these (Free, Tentative, Busy, Away (out of office), Working elsewhere, Unknown).
