@@ -587,6 +587,55 @@ async def test_options_flow_filters_not_accepted(
     YAML_CALENDAR_ENTITY_SCHEMA(entity)
 
 
+async def test_options_flow_filters_per_calendar(
+    tmp_path,
+    hass: HomeAssistant,
+    setup_base_integration,
+    base_config_entry: MS365MockConfigEntry,
+) -> None:
+    """Test each calendar's filters are filled in from and saved to its own entry."""
+    result = await hass.config_entries.options.async_init(base_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={**OPTIONS, CONF_CALENDAR_LIST: ["Calendar1", "Calendar3"]},
+    )
+    assert result["last_step"] is False
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={**CALENDAR1, FILTERS: {CONF_EXCLUDE_DECLINED: True}},
+    )
+
+    # The next calendar is filled in from its own entry
+    assert result["description_placeholders"]["device_id"] == "Calendar3"
+    assert result["last_step"] is True
+    assert _filter_values(result) == {
+        CONF_SEARCH: None,
+        CONF_EXCLUDE: [],
+        CONF_SENSITIVITY_EXCLUDE: [],
+        CONF_EXCLUDE_DECLINED: None,
+        CONF_SHOW_AS_EXCLUDE: [],
+    }
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            **CALENDAR1,
+            CONF_NAME: "Calendar3",
+            FILTERS: {CONF_EXCLUDE: ["^Event"]},
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    entities = {
+        calendar["cal_id"]: calendar["entities"][0]
+        for calendar in read_yaml_file(tmp_path)
+    }
+    assert entities["calendar1"]["exclude_declined"] is True
+    assert CONF_EXCLUDE not in entities["calendar1"]
+    assert entities["calendar3"][CONF_EXCLUDE] == ["^Event"]
+    assert CONF_EXCLUDE_DECLINED not in entities["calendar3"]
+
+
 async def _async_setup(
     hass: HomeAssistant,
     tmp_path,
