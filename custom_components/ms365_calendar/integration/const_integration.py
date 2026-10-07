@@ -120,4 +120,8 @@ PERM_CALENDARS_READWRITE = "Calendars.ReadWrite"
 PERM_GROUP_READ_ALL = "Group.Read.All"
 PERM_GROUP_READWRITE_ALL = "Group.ReadWrite.All"
 
+# The parts of an RRULE that _rrule_processing turns into an MS Graph series
+RRULE_FREQUENCIES = ("DAILY", "WEEKLY", "MONTHLY", "YEARLY")
+RRULE_PARTS = ("FREQ", "INTERVAL", "COUNT", "UNTIL", "BYDAY", "BYMONTHDAY")
+
 YAML_CALENDARS_FILENAME = "ms365_calendars{0}.yaml"
