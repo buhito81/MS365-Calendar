@@ -77,7 +77,7 @@ For example, this template gives the address of the first event as one line, suc
 - `provider` - the service of the meeting: `teams_for_business`, `skype_for_business` or `skype_for_consumer`, or `null` when MS Graph does not say which
 - `join_url` - the link to join the meeting, or `null` when MS365 has none for it. This is the join link MS Graph has for the meeting. Some older meetings, such as Skype meetings, only have a link in the older `onlineMeetingUrl` field of MS Graph, which is then used
 
-Only the meetings MS365 knows as online meetings are shown. A link to another service, such as Zoom or Webex, that is only in the text of the event is not looked for.
+`online_meeting` only comes from what MS365 has on the meeting itself. A link to another service, such as Zoom or Webex, that is only in the text of the event is not looked for, so such an event has `online_meeting` `null`.
 
 `web_link` is the link that opens the event in Outlook on the web. It only opens the event for someone who can open that calendar there.
 
