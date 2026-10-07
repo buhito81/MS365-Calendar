@@ -65,3 +65,33 @@ For example, this template gives the address of the first event as one line, suc
 {% endif %}
 ```
 {% endraw %}
+
+### Online meetings and links
+
+`online_meeting` is set for an online meeting, such as a Teams meeting, and is `null` for any other event. It has:
+
+- `provider` - the service of the meeting: `teams_for_business`, `skype_for_business` or `skype_for_consumer`, or `null` when MS Graph does not say which
+- `join_url` - the link to join the meeting, or `null` when MS365 has none for it. This is the join link MS Graph has for the meeting. Some older meetings, such as Skype meetings, only have a link in the older `onlineMeetingUrl` field of MS Graph, which is then used
+
+Only the meetings MS365 knows as online meetings are shown. A link to another service, such as Zoom or Webex, that is only in the text of the event is not looked for.
+
+`web_link` is the link that opens the event in Outlook on the web. It only opens the event for someone who can open that calendar there.
+
+```yaml
+online_meeting:
+  provider: teams_for_business
+  join_url: https://teams.microsoft.com/l/meetup-join/19%3ameeting_...
+web_link: https://outlook.office365.com/owa/?itemid=...&exvsurl=1&path=/calendar/item
+```
+
+Anyone who has the join link can use it to join the meeting, or wait in its lobby, so take care where you show or send it, such as in a notification or on a dashboard others can see. The `data` attribute is not kept in the history of the calendar, and the integration's diagnostics have no event data, so the links are in neither.
+
+For example, this template gives the join link of the first online meeting in the period that has one, such as for a button on a dashboard. It gives nothing when there is none:
+
+{% raw %}
+```
+{% set events = state_attr('calendar.user_primary', 'data') or [] %}
+{% set meetings = events | map(attribute='online_meeting') | select | selectattr('join_url') | list %}
+{{ meetings[0].join_url if meetings else '' }}
+```
+{% endraw %}
