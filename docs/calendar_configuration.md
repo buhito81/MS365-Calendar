@@ -72,7 +72,7 @@ Exclude events with sensitivity | `sensitivity_exclude`
 Exclude declined events | `exclude_declined`
 Exclude events shown as | `show_as_exclude`
 
-Saving the options writes the filters into the calendar's entry and reloads the integration, so they apply straight away, also when nothing else was changed. A filter that is cleared, or set to its default (no text, no entries, nothing selected, or Exclude declined events off), is removed from the entry, so the calendar works as if it had never been set. The other settings in the file are kept. `show_as_exclude` is written as MS365 names the values, such as `workingElsewhere`.
+Saving the options writes the filters into the calendar's entry and reloads the integration, so they apply straight away, also when nothing else was changed. A filter that is cleared, or set to its default (no text, no entries, nothing selected, or Exclude declined events off), is removed from the entry, so the calendar works as if the filter had never been set. The other settings in the file are kept. `show_as_exclude` is written as MS365 names the values, such as `workingElsewhere`.
 
 Each exclude must be a valid regular expression. If one is not, the form is shown again with an error that names it, and nothing is saved until it is corrected. Empty entries are removed.
 
