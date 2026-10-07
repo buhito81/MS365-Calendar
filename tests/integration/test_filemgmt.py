@@ -102,10 +102,10 @@ async def test_invalid_calendar_named(
     assert warnings == [
         f"{prefix} cal_id 'calendar1' with entities named ['Calendar1', 'Calendar1 away']: "
         "expected EventShowAs or one of 'free', 'tentative', 'busy', 'oof', "
-        "'working_elsewhere', 'unknown' @ data['entities'][1]['show_as_exclude'][0]",
+        "'working_elsewhere', 'unknown' at 'entities[1].show_as_exclude[0]'",
         f"{prefix} cal_id 'calendar2' with entities named []: "
-        "expected a dictionary @ data['entities'][0]",
-        f"{prefix} 'calendar3': expected a dictionary",
+        "expected a mapping at 'entities[0]'",
+        f"{prefix} 'calendar3': expected a mapping",
     ]
 
 
