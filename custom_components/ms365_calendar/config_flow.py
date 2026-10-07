@@ -12,6 +12,7 @@ import voluptuous as vol
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import (
     CONN_CLASS_CLOUD_POLL,
+    SOURCE_REAUTH,
     ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
@@ -234,6 +235,8 @@ class MS365ConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             if not (loaded and changed):
                 self.hass.config_entries.async_schedule_reload(self._entry.entry_id)
+            if self.source == SOURCE_REAUTH:
+                return self.async_abort(reason="reauth_successful")
             return self.async_abort(reason="reconfigure_successful")
 
         return self.async_create_entry(title=self.entity_name, data=self._user_input)
@@ -323,6 +326,27 @@ class MS365ConfigFlow(ConfigFlow, domain=DOMAIN):
         """Trigger a reconfiguration flow."""
         self._entry = self._get_reconfigure_entry()
         assert self._entry
+        return await self._redo_configuration(self._entry.data)
+
+    async def async_step_reauth(
+        self,
+        entry_data: Mapping[str, Any],  # pylint: disable=unused-argument
+    ) -> ConfigFlowResult:
+        """Trigger a re-authentication flow, such as for an expired token."""
+        self._entry = self._get_reauth_entry()
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: Mapping[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm the re-authentication, then re-run the configuration step."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                description_placeholders={
+                    CONF_ENTITY_NAME: self._entry.data[CONF_ENTITY_NAME]
+                },
+            )
         return await self._redo_configuration(self._entry.data)
 
     async def _redo_configuration(

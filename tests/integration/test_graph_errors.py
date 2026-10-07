@@ -15,8 +15,8 @@ from homeassistant.util import dt as dt_util
 from requests.exceptions import ConnectionError as RequestConnectionError, RetryError
 from requests_mock import Mocker
 
-from ..const import ENTITY_NAME
 from ..helpers.mock_config_entry import MS365MockConfigEntry
+from ..helpers.reauth import async_reauthenticate, reauth_flows, reauth_issue
 from ..helpers.refresh import (
     REFRESH_UNAVAILABLE,
     expire_access_token,
@@ -136,8 +136,10 @@ async def test_sync_token_refresh_failure(
     caplog: pytest.LogCaptureFixture,
     error,
 ) -> None:
-    """Test a token that can no longer be refreshed raises the repair issue."""
+    """Test a token that can no longer be refreshed starts re-authentication."""
     coordinator = _coordinator(base_config_entry, "calendar1")
+    cached_events = hass.states.get("calendar.test_calendar1").attributes["data"]
+    assert len(cached_events) == 2
     await _async_expire_token(hass, tmp_path, base_config_entry)
     requests_mock.get(CALENDAR1_VIEW, status_code=401)
     mock_refresh_failure(requests_mock, error)
@@ -145,12 +147,15 @@ async def test_sync_token_refresh_failure(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    issues = list(issue_registry.issues.values())
-    assert [issue.translation_key for issue in issues] == ["expired"]
-    assert issues[0].issue_id == f"expired_{base_config_entry.entry_id}"
-    assert issues[0].translation_placeholders["entity_name"] == ENTITY_NAME
+    flows = reauth_flows(hass, base_config_entry)
+    assert [flow["step_id"] for flow in flows] == ["reauth_confirm"]
+    assert list(issue_registry.issues) == [reauth_issue(base_config_entry)]
+    assert base_config_entry.state is ConfigEntryState.LOADED
     check_entity_state(
-        hass, "calendar.test_calendar1", "on", attributes={"sync_state": "problem"}
+        hass,
+        "calendar.test_calendar1",
+        "on",
+        attributes={"sync_state": "problem", "data": cached_events},
     )
     assert (
         "Unable to refresh the token, fetching from cache: "
@@ -158,12 +163,19 @@ async def test_sync_token_refresh_failure(
     ) in caplog.text
     assert "Unexpected error" not in caplog.text
 
-    # The issue goes once the calendar syncs again, such as after a reconfigure
+    # Every sync asks again, and HA keeps the one flow
+    await coordinator.async_refresh()
+    await _async_get_events(hass)
+    await hass.async_block_till_done()
+
+    assert reauth_flows(hass, base_config_entry) == flows
+    assert list(issue_registry.issues) == [reauth_issue(base_config_entry)]
+
+    # The calendar syncs again once the token works
     MS365MOCKS.standard_mocks(requests_mock)
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    assert not issue_registry.issues
     check_entity_state(
         hass, "calendar.test_calendar1", "on", attributes={"sync_state": "ok"}
     )
@@ -192,10 +204,11 @@ async def test_get_events_token_refresh_failure(
     mock_refresh_failure(requests_mock, error)
 
     result = await _async_get_events(hass)
+    await hass.async_block_till_done()
 
     assert result["calendar.test_calendar1"]["events"] == []
-    issues = list(issue_registry.issues.values())
-    assert [issue.translation_key for issue in issues] == ["expired"]
+    assert len(reauth_flows(hass, base_config_entry)) == 1
+    assert list(issue_registry.issues) == [reauth_issue(base_config_entry)]
 
     # Other errors are not taken for a token problem
     with (
@@ -205,6 +218,41 @@ async def test_get_events_token_refresh_failure(
         pytest.raises(RuntimeError, match="Other error"),
     ):
         await _async_get_events(hass)
+
+
+async def test_reauth_while_running(
+    tmp_path,
+    hass: HomeAssistant,
+    setup_base_integration,
+    base_config_entry: MS365MockConfigEntry,
+    requests_mock: Mocker,
+    issue_registry: ir.IssueRegistry,
+) -> None:
+    """Test re-authenticating a running entry reloads it once with the new token."""
+    coordinator = _coordinator(base_config_entry, "calendar1")
+    await _async_expire_token(hass, tmp_path, base_config_entry)
+    requests_mock.get(CALENDAR1_VIEW, status_code=401)
+    mock_refresh_failure(requests_mock, "invalid_grant")
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    check_entity_state(
+        hass, "calendar.test_calendar1", "on", attributes={"sync_state": "problem"}
+    )
+
+    with patch.object(
+        hass.config_entries,
+        "async_reload",
+        wraps=hass.config_entries.async_reload,
+    ) as reload:
+        await async_reauthenticate(hass, requests_mock, base_config_entry)
+        assert reload.call_count == 1
+
+    assert base_config_entry.state is ConfigEntryState.LOADED
+    assert not reauth_flows(hass, base_config_entry)
+    assert not issue_registry.issues
+    check_entity_state(
+        hass, "calendar.test_calendar1", "on", attributes={"sync_state": "ok"}
+    )
 
 
 @pytest.mark.parametrize(("cause", "error"), REFRESH_UNAVAILABLE)

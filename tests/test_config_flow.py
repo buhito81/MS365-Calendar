@@ -24,6 +24,8 @@ from .const import (
     TOKEN_URL_CN21V_ASSERT,
 )
 from .helpers.mock_config_entry import MS365MockConfigEntry
+from .helpers.reauth import async_reauthenticate, reauth_flows, reauth_issue
+from .helpers.refresh import expire_access_token, mock_refresh_failure
 from .helpers.utils import (
     build_token_url,
     mock_call,
@@ -610,6 +612,46 @@ async def test_repair_issues_per_entry(
 
     assert base_config_entry.state is ConfigEntryState.LOADED
     assert list(issue_registry.issues) == [(DOMAIN, f"missing_{other_entry.entry_id}")]
+
+
+async def test_reauth_flow(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+    issue_registry: ir.IssueRegistry,
+) -> None:
+    """Test re-authenticating with a new client secret sets up the entry again."""
+    # The repair issue an older version raised for the expired token
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"expired_{base_config_entry.entry_id}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="expired",
+    )
+    MS365MOCKS.standard_mocks(requests_mock)
+    expire_access_token(tmp_path)
+    requests_mock.get(URL.ME.value, status_code=401)
+    mock_refresh_failure(requests_mock, "invalid_client", 401)
+    base_config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert base_config_entry.state is ConfigEntryState.SETUP_ERROR
+    # Home Assistant's own prompt is the only one
+    assert list(issue_registry.issues) == [reauth_issue(base_config_entry)]
+
+    user_input = deepcopy(RECONFIGURE_CONFIG_ENTRY)
+    user_input["client_secret"] = "9999"
+    await async_reauthenticate(hass, requests_mock, base_config_entry, user_input)
+
+    assert base_config_entry.state is ConfigEntryState.LOADED
+    assert base_config_entry.data["client_secret"] == "9999"
+    assert not reauth_flows(hass, base_config_entry)
+    assert not issue_registry.issues
 
 
 async def test_change_entity_name(

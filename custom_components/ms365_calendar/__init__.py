@@ -11,7 +11,7 @@ from requests.exceptions import (
 )
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.network import get_url
 
@@ -26,7 +26,6 @@ from .const import (
     TOKEN_DELETED,
     TOKEN_ERROR,
     TOKEN_EXPIRED,
-    TOKEN_FILE_EXPIRED,
     TOKEN_FILE_MISSING,
     TOKEN_REFRESH_SECRET,
 )
@@ -88,7 +87,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: MS365ConfigEntry):
             entry.async_on_unload(entry.add_update_listener(async_reload_entry))
             return True
 
-        error = TOKEN_FILE_EXPIRED
+        # Microsoft refused the token or the client secret, so have HA ask the user
+        # to re-authenticate, where a new client secret can be entered as well
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN,
+            translation_key="authentication_failed",
+        )
 
     url = f"{get_url(hass)}/config/integrations/integration/{DOMAIN}"
     ir.async_create_issue(

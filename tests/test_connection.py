@@ -24,6 +24,7 @@ from custom_components.ms365_calendar.classes.api import (
 
 from .const import ENTITY_NAME, TOKEN_LOCATION
 from .helpers.mock_config_entry import MS365MockConfigEntry
+from .helpers.reauth import reauth_flows, reauth_issue
 from .helpers.refresh import (
     REFRESH_UNAVAILABLE,
     expire_access_token,
@@ -36,6 +37,9 @@ from .integration.const_integration import DOMAIN, URL
 from .integration.helpers_integration.mocks import MS365MOCKS
 
 API = "custom_components.ms365_calendar.classes.api"
+REAUTH_REASON = (
+    "The token or the client secret is no longer accepted, please re-authenticate"
+)
 
 
 @pytest.mark.parametrize("error", [RequestConnectionError, ReadTimeout, RetryError])
@@ -100,7 +104,7 @@ async def test_token_refresh_refused(
     issue_registry: ir.IssueRegistry,
     error,
 ) -> None:
-    """Test a token the login service will no longer refresh raises the repair issue."""
+    """Test a token the login service will no longer refresh starts re-authentication."""
     MS365MOCKS.standard_mocks(requests_mock)
     expire_access_token(tmp_path)
     requests_mock.get(URL.ME.value, status_code=401)
@@ -112,10 +116,7 @@ async def test_token_refresh_refused(
 
     assert f"Token has expired for account: '{ENTITY_NAME}'" in caplog.text
     assert "Error setting up entry" not in caplog.text
-    assert base_config_entry.state is ConfigEntryState.SETUP_ERROR
-    issues = list(issue_registry.issues.values())
-    assert [issue.translation_key for issue in issues] == ["expired"]
-    assert issues[0].translation_placeholders["entity_name"] == ENTITY_NAME
+    _check_reauth_started(hass, base_config_entry, issue_registry)
 
 
 async def test_expired_secret(
@@ -127,7 +128,7 @@ async def test_expired_secret(
     caplog: pytest.LogCaptureFixture,
     issue_registry: ir.IssueRegistry,
 ) -> None:
-    """Test an expired client secret, as MSAL reports it, raises the repair issue."""
+    """Test an expired client secret, as MSAL reports it, starts re-authentication."""
     MS365MOCKS.standard_mocks(requests_mock)
     expire_access_token(tmp_path)
     requests_mock.get(URL.ME.value, status_code=401)
@@ -138,10 +139,16 @@ async def test_expired_secret(
     await hass.async_block_till_done()
 
     assert f"Client Secret expired for account: {ENTITY_NAME}" in caplog.text
-    assert base_config_entry.state is ConfigEntryState.SETUP_ERROR
-    issues = list(issue_registry.issues.values())
-    assert [issue.translation_key for issue in issues] == ["expired"]
-    assert issues[0].translation_placeholders["entity_name"] == ENTITY_NAME
+    _check_reauth_started(hass, base_config_entry, issue_registry)
+
+
+def _check_reauth_started(hass, entry, issue_registry):
+    """Check HA asks to re-authenticate, with no repair issue of the integration."""
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert entry.reason == REAUTH_REASON
+    flows = reauth_flows(hass, entry)
+    assert [flow["step_id"] for flow in flows] == ["reauth_confirm"]
+    assert list(issue_registry.issues) == [reauth_issue(entry)]
 
 
 async def test_requests_have_timeout(

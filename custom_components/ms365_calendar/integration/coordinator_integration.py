@@ -16,13 +16,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OK, STATE_PROBLEM, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.network import get_url
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from O365.calendar import Event  # pylint: disable=no-name-in-module)
 
-from ..const import CONF_ENTITY_NAME, TOKEN_FILE_EXPIRED
 from ..helpers.utils import token_refresh_refused, token_refresh_unavailable
 from .const_integration import (
     CONF_ADVANCED_OPTIONS,
@@ -34,7 +31,6 @@ from .const_integration import (
     DEFAULT_DAYS_BACKWARD,
     DEFAULT_DAYS_FORWARD,
     DEFAULT_UPDATE_INTERVAL,
-    DOMAIN,
 )
 from .sync.sync import MS365CalendarEventSyncManager
 from .sync.timeline import MS365Timeline
@@ -107,8 +103,6 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         try:
             await self.sync.run(self._last_sync_min, self._last_sync_max)
             self.sync_state = STATE_OK
-            # The token works again, such as after a reconfigure
-            ir.async_delete_issue(self.hass, DOMAIN, self._token_issue_id)
         except (HTTPError, RetryError, RequestConnectionError, Timeout) as err:
             _LOGGER.error(
                 "Error syncing calendar events from MS Graph, fetching from cache: %s",
@@ -279,25 +273,10 @@ class MS365CalendarSyncCoordinator(DataUpdateCoordinator):
         else:
             _LOGGER.debug("Repeat error - %s - %s", error, err)
 
-    @property
-    def _token_issue_id(self) -> str:
-        return f"{TOKEN_FILE_EXPIRED}_{self.config_entry.entry_id}"
-
     def _async_token_error(self, err: Exception) -> bool:
-        """Check for a failed token refresh, and raise the repair issue if needed."""
+        """Check for a failed token refresh, and start re-authentication if needed."""
         if not token_refresh_refused(err):
             return token_refresh_unavailable(err)
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            self._token_issue_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.ERROR,
-            translation_key=TOKEN_FILE_EXPIRED,
-            translation_placeholders={
-                "domain": DOMAIN,
-                "url": f"{get_url(self.hass)}/config/integrations/integration/{DOMAIN}",
-                CONF_ENTITY_NAME: self.config_entry.data.get(CONF_ENTITY_NAME),
-            },
-        )
+        # HA starts one flow for the entry, so asking again on every sync does no harm
+        self.config_entry.async_start_reauth(self.hass)
         return True
