@@ -36,6 +36,7 @@ def async_delete_token_issues(hass: HomeAssistant, entry_id):
     """Delete the token repair issues of a config entry."""
     for error in (
         TOKEN_FILE_CORRUPTED,
+        # Older versions raised it for an expired token, which now starts re-auth
         TOKEN_FILE_EXPIRED,
         TOKEN_FILE_MISSING,
         TOKEN_FILE_OUTDATED,
