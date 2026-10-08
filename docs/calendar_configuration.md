@@ -76,7 +76,7 @@ Saving the options writes the filters into the calendar's entry and reloads the 
 
 Each exclude must be a valid regular expression. If one is not, the form is shown again with an error that names it, and nothing is saved until it is corrected. Empty entries are removed.
 
-A value the file does not accept, such as `sensitivity_exclude: Private` or a `show_as_exclude` value MS365 does not have, is not shown in the form, so it is removed from the file when the form of that calendar is saved. A single `exclude` given as text instead of a list is shown as one entry, and saved as a list.
+A value the file does not accept, such as `sensitivity_exclude: Private` or a `show_as_exclude` value MS365 does not have, is not shown in the form, so it is removed from the file when the form of that calendar is saved. A single `exclude` given as text instead of a list is shown as one entry, and saved as a list. If the integration added an entry for that calendar at the end of the file while its entry was not valid (see above), saving does not remove it. While both are in the file, the added one is used, so delete it from the file and reload the integration.
 
 ## Group calendars
 
@@ -109,7 +109,7 @@ To exclude calendar items from being displayed, the exclude attribute can be use
      - "^In.*Junk$"
 ```
 
-Each item is used as a regex, so characters such as `[ ] ( ) . * + ?` have their regex meaning; to match them as text, escape them with `\` inside single quotes, e.g. `'\[External\]'`. An item that is not a valid regex, such as `"(Optional"`, is matched as plain text and a warning is logged. The options do not save such an item, see [Filters in the options](#filters-in-the-options).
+Each item is used as a regex, so characters such as `[ ] ( ) . * + ?` have their regex meaning; to match them as text, escape them with `\` inside single quotes, e.g. `'\[External\]'`. An item that is not a valid regex, such as `"(Optional"`, is matched as plain text and a warning is logged. The options do not accept such an item: if that calendar is enabled, its form is shown again with an error naming the item until you escape it (such as `\(Optional`) or remove it, and nothing is saved. This also happens when you only opened the options to change something else, see [Filters in the options](#filters-in-the-options).
 
 Matching is case sensitive. To ignore case, start the item with `(?i)`, e.g. `'(?i)^private'`. It must be at the very start: placed later, as in `'^(?i)private'`, the item is not a valid regex and is matched as plain text.
 
