@@ -125,9 +125,13 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
         if not self._yaml_contents:
             return self.async_abort(reason="no_calendars")
 
-        # Entries that are not valid are not shown, and are written back as they are
+        # Entries that are not valid, or whose entities are not a list, are not
+        # shown, and are written back as they are
         self._calendars = [
-            calendar for calendar in self._yaml_contents if validate_calendar(calendar)
+            calendar
+            for calendar in self._yaml_contents
+            if validate_calendar(calendar)
+            and isinstance(calendar.get(CONF_ENTITIES), list)
         ]
         for calendar in self._calendars:
             for entity in calendar.get(CONF_ENTITIES):

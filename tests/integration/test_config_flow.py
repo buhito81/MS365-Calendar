@@ -300,6 +300,8 @@ async def test_options_flow_no_calendars(
         "ms365_calendars_invalid_cal_id",
         "ms365_calendars_invalid_empty_cal_id",
         "ms365_calendars_invalid_dash",
+        "ms365_calendars_entities_empty",
+        "ms365_calendars_entities_mapping",
     ],
 )
 async def test_options_flow_invalid_entry(
