@@ -28,28 +28,28 @@ _LOGGER = logging.getLogger(__name__)
 def load_yaml_file(path, item_id, display_error=False):
     """Load the ms365 yaml file."""
     items = {}
-    try:
-        with open(path, encoding="utf8") as file:
-            data = yaml.safe_load(file)
-            if data is None:
-                return {}
-            for item in data:
-                try:
-                    items[item[item_id]] = YAML_CALENDAR_DEVICE_SCHEMA(item)
-                except VoluptuousError as exception:
-                    # keep going
-                    if display_error:
-                        _LOGGER.warning(
-                            "Invalid Data - duplicate entries may be created in file %s - for item %s: %s",
-                            path,
-                            item,
-                            exception,
-                        )
-    except FileNotFoundError:
-        # When YAML file could not be loaded/did not contain a dict
-        return {}
+    for item in read_calendar_yaml_file(path):
+        try:
+            items[item[item_id]] = YAML_CALENDAR_DEVICE_SCHEMA(item)
+        except VoluptuousError as exception:
+            # keep going
+            if display_error:
+                _LOGGER.warning(
+                    "Invalid Data - entry ignored until it is fixed in file %s - for item %s: %s",
+                    path,
+                    item,
+                    exception,
+                )
 
     return items
+
+
+def validate_calendar(calendar):
+    """Validate a calendar entry, None if it is not valid."""
+    try:
+        return YAML_CALENDAR_DEVICE_SCHEMA(calendar)
+    except VoluptuousError:
+        return None
 
 
 def write_yaml_file(yaml_filepath, cal):
@@ -85,10 +85,13 @@ async def async_update_calendar_file(
     path = build_yaml_filename(entry, YAML_CALENDARS_FILENAME)
     yaml_filepath = build_yaml_file_path(hass, path)
     existing_calendars = await hass.async_add_executor_job(
-        load_yaml_file, yaml_filepath, CONF_CAL_ID
+        read_calendar_yaml_file, yaml_filepath
     )
     cal = _get_calendar_info(calendar, track_new_devices)
-    if cal[CONF_CAL_ID] in existing_calendars:
+    # Also check entries that are not valid, so a calendar is not added twice
+    if cal[CONF_CAL_ID] in [
+        item.get(CONF_CAL_ID) for item in existing_calendars if isinstance(item, dict)
+    ]:
         return
     await hass.async_add_executor_job(write_yaml_file, yaml_filepath, cal)
 
@@ -103,22 +106,31 @@ async def async_check_for_deleted_calendars(
     existing_calendars = await hass.async_add_executor_job(
         load_yaml_file, yaml_filepath, CONF_CAL_ID, True
     )
-    updated_calendars = []
     deleted_calendars = []
     for e_cal_id in existing_calendars:
         if e_cal_id.startswith(CONST_GROUP) or e_cal_id in [
             calendar.calendar_id for calendar in calendars
         ]:
-            updated_calendars.append(existing_calendars[e_cal_id])
             continue
         _LOGGER.info("Calendar deleted from %s: %s", path, e_cal_id)
 
         deleted_calendars.append(existing_calendars[e_cal_id])
     if deleted_calendars:
         await hass.async_add_executor_job(
-            write_calendar_yaml_file, yaml_filepath, updated_calendars
+            _remove_calendars_from_file, yaml_filepath, deleted_calendars
         )
     return deleted_calendars
+
+
+def _remove_calendars_from_file(yaml_filepath, deleted_calendars):
+    """Remove the deleted calendars, other entries are written back as they are."""
+    deleted_ids = [calendar[CONF_CAL_ID] for calendar in deleted_calendars]
+    updated_calendars = []
+    for calendar in read_calendar_yaml_file(yaml_filepath):
+        valid_calendar = validate_calendar(calendar)
+        if not valid_calendar or valid_calendar[CONF_CAL_ID] not in deleted_ids:
+            updated_calendars.append(calendar)
+    write_calendar_yaml_file(yaml_filepath, updated_calendars)
 
 
 def build_yaml_filename(conf: MS365ConfigEntry, filename):
@@ -134,11 +146,15 @@ def build_yaml_file_path(hass: HomeAssistant, yaml_filename):
 
 def read_calendar_yaml_file(yaml_filepath):
     """Read the yaml file."""
-    with open(yaml_filepath, encoding="utf8") as file:
-        return yaml.safe_load(file)
+    try:
+        with open(yaml_filepath, encoding="utf8") as file:
+            return yaml.safe_load(file) or []
+    except FileNotFoundError:
+        # When YAML file could not be loaded
+        return []
 
 
 def write_calendar_yaml_file(yaml_filepath, contents):
     """Write the yaml file."""
     with open(yaml_filepath, "w", encoding="UTF8") as out:
-        yaml.dump(contents, out, default_flow_style=False, encoding="UTF8")
+        yaml.safe_dump(contents, out, default_flow_style=False, encoding="UTF8")

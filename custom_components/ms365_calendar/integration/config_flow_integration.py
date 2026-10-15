@@ -44,6 +44,7 @@ from .filemgmt_integration import (
     build_yaml_file_path,
     build_yaml_filename,
     read_calendar_yaml_file,
+    validate_calendar,
     write_calendar_yaml_file,
     write_yaml_file,
 )
@@ -99,6 +100,7 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize MS365 options flow."""
 
         self._track_new_calendar = entry.options.get(CONF_TRACK_NEW_CALENDAR, True)
+        self._yaml_contents = []
         self._calendars = []
         self._calendar_list = []
         self._calendar_list_selected = []
@@ -115,14 +117,18 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
         """Set up the option flow."""
 
         self._yaml_filepath = build_yaml_file_path(self.hass, self._yaml_filename)
-        self._calendars = await self.hass.async_add_executor_job(
+        self._yaml_contents = await self.hass.async_add_executor_job(
             read_calendar_yaml_file,
             self._yaml_filepath,
         )
 
-        if not self._calendars:
+        if not self._yaml_contents:
             return self.async_abort(reason="no_calendars")
 
+        # Entries that are not valid are not shown, and are written back as they are
+        self._calendars = [
+            calendar for calendar in self._yaml_contents if validate_calendar(calendar)
+        ]
         for calendar in self._calendars:
             for entity in calendar.get(CONF_ENTITIES):
                 self._calendar_list.append(entity[CONF_DEVICE_ID])
@@ -276,7 +282,7 @@ class MS365OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def _async_tidy_up(self, user_input):
         await self.hass.async_add_executor_job(
-            write_calendar_yaml_file, self._yaml_filepath, self._calendars
+            write_calendar_yaml_file, self._yaml_filepath, self._yaml_contents
         )
         for calendar in self._calendar_list_selected_original:
             if calendar not in self._calendar_list_selected:

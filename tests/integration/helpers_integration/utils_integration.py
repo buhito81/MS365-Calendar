@@ -80,3 +80,10 @@ def read_yaml_file(tmp_path):
     path = tmp_path / STORAGE_LOCATION / f"{DOMAIN}s_test.yaml"
     with open(path, encoding="utf8") as file:
         return yaml.safe_load(file)
+
+
+def write_yaml_file(tmp_path, calendars):
+    """Write the calendars yaml file."""
+    path = tmp_path / STORAGE_LOCATION / f"{DOMAIN}s_test.yaml"
+    with open(path, "w", encoding="utf8") as file:
+        yaml.safe_dump(calendars, file)

@@ -293,6 +293,63 @@ async def test_options_flow_no_calendars(
     assert result["reason"] == "no_calendars"
 
 
+@pytest.mark.parametrize(
+    "infile",
+    [
+        "ms365_calendars_invalid_entity",
+        "ms365_calendars_invalid_cal_id",
+        "ms365_calendars_invalid_empty_cal_id",
+        "ms365_calendars_invalid_dash",
+    ],
+)
+async def test_options_flow_invalid_entry(
+    tmp_path,
+    hass: HomeAssistant,
+    requests_mock: Mocker,
+    base_token,
+    base_config_entry: MS365MockConfigEntry,
+    infile,
+) -> None:
+    """Test the options flow leaves an entry that is not valid as it is."""
+    MS365MOCKS.standard_mocks(requests_mock)
+    yaml_setup(tmp_path, infile)
+    base_config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(base_config_entry.entry_id)
+    await hass.async_block_till_done()
+    calendars = read_yaml_file(tmp_path)
+
+    result = await hass.config_entries.options.async_init(base_config_entry.entry_id)
+    schema = result["data_schema"].schema
+    assert get_schema_default(schema, CONF_CALENDAR_LIST) == [
+        "Calendar1",
+        "Calendar2",
+        "Calendar3",
+    ]
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_TRACK_NEW_CALENDAR: True,
+            CONF_CALENDAR_LIST: UPDATE_CALENDAR_LIST,
+            CONF_ADVANCED_OPTIONS: {
+                CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
+                CONF_DAYS_BACKWARD: DEFAULT_DAYS_BACKWARD,
+                CONF_DAYS_FORWARD: DEFAULT_DAYS_FORWARD,
+            },
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={CONF_NAME: "Calendar1_Changed"},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    new_calendars = read_yaml_file(tmp_path)
+    assert new_calendars[0]["entities"][0]["name"] == "Calendar1_Changed"
+    assert new_calendars[3] == calendars[3]
+
+
 def mock_account(email):
     """Mock the account."""
     return MagicMock(is_authenticated=True, username=email, main_resource=email)
