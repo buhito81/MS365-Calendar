@@ -168,6 +168,7 @@ async def test_corrupt_file_repaired(
         "ms365_calendars_invalid_cal_id",
         "ms365_calendars_invalid_empty_cal_id",
         "ms365_calendars_invalid_dash",
+        "ms365_calendars_invalid_duplicate",
     ],
 )
 async def test_invalid_entry_kept(

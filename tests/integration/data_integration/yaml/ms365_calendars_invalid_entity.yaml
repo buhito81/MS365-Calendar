@@ -19,7 +19,7 @@
     name: Calendar3
     start_offset: 0
     track: true
-- cal_id: group:calendar4
+- cal_id: calendar4
   entities:
   - device_id: Calendar4
     end_offset: 24
