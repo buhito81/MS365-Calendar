@@ -67,7 +67,7 @@ async def test_corrupt_file(
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    assert "Invalid Data - entry ignored until it is fixed" in caplog.text
+    assert "Invalid Data - entry not loaded" in caplog.text
 
 
 async def test_corrupt_file_2(
@@ -89,7 +89,7 @@ async def test_corrupt_file_2(
     await hass.config_entries.async_setup(base_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    assert "Invalid Data - entry ignored until it is fixed" in caplog.text
+    assert "Invalid Data - entry not loaded" in caplog.text
 
     entities = er.async_entries_for_config_entry(
         entity_registry, base_config_entry.entry_id
@@ -144,7 +144,9 @@ async def test_corrupt_file_repaired(
         "calendar3",
     ]
     assert hass.states.get("calendar.test_calendar1") is None
-    assert caplog.text.count("Invalid Data - entry ignored until it is fixed") == 1
+    assert caplog.text.count("Invalid Data - entry not loaded") == 1
+    assert "'cal_id': 'calendar1'" in caplog.text
+    assert "required key not provided" in caplog.text
 
     caplog.clear()
     calendars[0]["entities"][0]["name"] = "Calendar1 Repaired"
@@ -198,7 +200,7 @@ async def test_invalid_entry_kept(
     assert read_yaml_file(tmp_path) == calendars
     assert "Calendar deleted from" in caplog.text
     # One warning at each start
-    assert caplog.text.count("Invalid Data - entry ignored until it is fixed") == 2
+    assert caplog.text.count("Invalid Data - entry not loaded") == 2
 
 
 async def test_deleted_file_sensitivity(

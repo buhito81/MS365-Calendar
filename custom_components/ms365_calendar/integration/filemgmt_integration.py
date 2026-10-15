@@ -35,7 +35,7 @@ def load_yaml_file(path, item_id, display_error=False):
             # keep going
             if display_error:
                 _LOGGER.warning(
-                    "Invalid Data - entry ignored until it is fixed in file %s - for item %s: %s",
+                    "Invalid Data - entry not loaded from file %s - for item %s: %s",
                     path,
                     item,
                     exception,
