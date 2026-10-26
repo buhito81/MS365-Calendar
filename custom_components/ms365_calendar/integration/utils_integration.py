@@ -77,6 +77,7 @@ def format_event_data(event):
             "is_on": event.is_reminder_on,
         },
         "organizer": event.organizer.address,
+        "response": event.response_status.status.value if event.response_status.status else None,
         "attendees": [
             {
                 "email": x.address,
