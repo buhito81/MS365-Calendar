@@ -15,6 +15,7 @@ from O365.calendar import (  # pylint: disable=no-name-in-module
     EventSensitivity,
     EventShowAs,
 )
+from O365.utils import to_snake_case  # pylint: disable=no-name-in-module
 
 from ..const import CONF_ENABLE_UPDATE, CONF_SHARED_MAILBOX
 from .const_integration import (
@@ -43,12 +44,14 @@ from .const_integration import (
     CONF_DEVICE_ID,
     CONF_ENTITIES,
     CONF_EXCLUDE,
+    CONF_EXCLUDE_DECLINED,
     CONF_GROUPS,
     CONF_HOURS_BACKWARD_TO_GET,
     CONF_HOURS_FORWARD_TO_GET,
     CONF_MAX_RESULTS,
     CONF_SEARCH,
     CONF_SENSITIVITY_EXCLUDE,
+    CONF_SHOW_AS_EXCLUDE,
     CONF_TRACK,
     DEFAULT_HOURS_BACKWARD_TO_GET,
     DEFAULT_HOURS_FORWARD_TO_GET,
@@ -182,6 +185,13 @@ YAML_CALENDAR_ENTITY_SCHEMA = vol.Schema(
         vol.Optional(CONF_MAX_RESULTS): cv.positive_int,
         vol.Optional(CONF_SENSITIVITY_EXCLUDE): vol.All(
             cv.ensure_list, [vol.Coerce(EventSensitivity)]
+        ),
+        # No default, so a calendar added to the file is written without it
+        vol.Optional(CONF_EXCLUDE_DECLINED): cv.boolean,
+        # Snake case, so Graph's workingElsewhere and the name WorkingElsewhere match
+        vol.Optional(CONF_SHOW_AS_EXCLUDE): vol.All(
+            cv.ensure_list,
+            [vol.All(cv.string, to_snake_case, vol.Coerce(EventShowAs))],
         ),
     }
 )
