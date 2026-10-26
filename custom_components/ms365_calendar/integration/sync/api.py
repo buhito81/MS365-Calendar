@@ -121,6 +121,7 @@ class MS365CalendarService:
             "show_as",
             "organizer",
             "attendees",
+            "response_status",
             "series_master_id",
             "is_reminder_on",
             "reminderMinutesBeforeStart",

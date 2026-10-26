@@ -16,6 +16,7 @@ BASE_STATE_CAL1 = [
         "show_as": "Busy",
         "reminder": {"minutes": 30, "is_on": True},
         "organizer": "john@nomail.com",
+        "response": None,
         "attendees": [
             {"email": "jane@nomail.com", "type": "required", "status": "not_responded"}
         ],
@@ -35,6 +36,7 @@ BASE_STATE_CAL1 = [
         "reminder": {"minutes": 0, "is_on": False},
         "attendees": [],
         "organizer": "",
+        "response": None,
         "uid": "event2",
         "web_link": None,
     },
@@ -54,6 +56,7 @@ BASE_STATE_CAL2 = [
         "reminder": {"minutes": 0, "is_on": False},
         "attendees": [],
         "organizer": "",
+        "response": None,
         "uid": "event1",
         "web_link": None,
     }
