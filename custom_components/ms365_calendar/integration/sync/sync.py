@@ -52,7 +52,7 @@ class MS365CalendarEventSyncManager:
         return self._filter_events(events)
 
     def _is_hidden(self, event):
-        """Check if the settings hide the event, by your response or its show as."""
+        """Check if the settings hide the event, by the owner's response or show as."""
         if self._exclude_declined and event.response_status.status == EventResponse.Declined:
             return True
         return event.show_as in self._show_as_exclude

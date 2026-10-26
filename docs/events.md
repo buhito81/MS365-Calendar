@@ -18,7 +18,7 @@ Events will be raised for the following items.
 - ms365_calendar_remove_calendar_recurrences - Removal of a recurring event series via the MS365 Calendar integration
 - ms365_calendar_respond_calendar_event - Response to an event via the MS365 Calendar integration
 
-After a response the calendar is synchronized again, so the `response` field of the event, in the `data` attribute and in `ms365_calendar.get_calendar_events`, shows your new response. To leave out the events you have declined, see [exclude_declined](./calendar_configuration.md#exclude-declined).
+After a response the calendar is synchronized again, so the `response` field of the event, in the `data` attribute and in `ms365_calendar.get_calendar_events`, shows the new response. To leave out declined events, see [exclude_declined](./calendar_configuration.md#exclude-declined).
 
 The events have the following general structure:
 
