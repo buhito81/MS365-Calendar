@@ -14,3 +14,4 @@ Each event in `data` also has these read-only fields from MS Graph. What their v
 - `locations` - each place of the event, one item for an event in one place, with its `name` and MS Graph's `type`, plus the `address`, `coordinates`, `email` and `uri` when they are filled in; left out for an event without a place
 - `online_meeting` - the `provider` and `join_url` of an online meeting, such as a Teams meeting; left out for any other event
 - `web_link` - the link that opens the event in Outlook on the web
+- `response` - your own response to the event, in the same form as the `status` of each attendee: `accepted`, `tentatively_accepted`, `declined`, `not_responded` or `organizer`, or empty (`null`) when MS365 has no response for it. Events you have declined can be left out with `exclude_declined`, see [Calendar configuration](./calendar_configuration.md#exclude-declined).
