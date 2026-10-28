@@ -112,7 +112,6 @@ calendar.user_primary:
         minutes: 15
         is_on: true
       organizer: me@example.com
-      response: organizer
       attendees:
         - email: alex@example.com
           type: required
