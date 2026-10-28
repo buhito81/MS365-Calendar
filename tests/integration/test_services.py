@@ -146,9 +146,7 @@ async def test_get_calendar_events_outside_range(
     assert all("attendees" in event and "organizer" in event for event in events)
 
 
-@pytest.mark.parametrize(
-    "setup_base_integration", [{"method_name": "location_event_mocks"}], indirect=True
-)
+@pytest.mark.parametrize("setup_base_integration", [{"method_name": "location_event_mocks"}], indirect=True)
 async def test_get_calendar_events_location_details(
     hass: HomeAssistant,
     setup_base_integration,
@@ -171,9 +169,7 @@ async def test_get_calendar_events_location_details(
     assert location_fields(result[calendar_name]["events"]) == LOCATION_STATE
 
 
-@pytest.mark.parametrize(
-    "setup_base_integration", [{"method_name": "meeting_event_mocks"}], indirect=True
-)
+@pytest.mark.parametrize("setup_base_integration", [{"method_name": "meeting_event_mocks"}], indirect=True)
 async def test_get_calendar_events_meeting_links(
     hass: HomeAssistant,
     setup_base_integration,

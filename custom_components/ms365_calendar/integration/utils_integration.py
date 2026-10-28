@@ -112,11 +112,7 @@ def _location_details(location):
 
 
 def _location_address(address):
-    return {
-        key: address[graph_key]
-        for key, graph_key in LOCATION_ADDRESS.items()
-        if address.get(graph_key)
-    }
+    return {key: address[graph_key] for key, graph_key in LOCATION_ADDRESS.items() if address.get(graph_key)}
 
 
 def _location_coordinates(coordinates):
@@ -136,10 +132,7 @@ def _locations(locations):
     """
     if len(locations or []) < 2:
         return None
-    return [
-        {"name": place.get("displayName", ""), **(_location_details(place) or {})}
-        for place in locations
-    ]
+    return [{"name": place.get("displayName", ""), **(_location_details(place) or {})} for place in locations]
 
 
 def _online_meeting(event):

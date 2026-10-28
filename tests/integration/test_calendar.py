@@ -364,9 +364,7 @@ async def test_first_sync_error(
     assert "No current event found for group:calendar2" in caplog.text
 
 
-@pytest.mark.parametrize(
-    "setup_base_integration", [{"method_name": "location_event_mocks"}], indirect=True
-)
+@pytest.mark.parametrize("setup_base_integration", [{"method_name": "location_event_mocks"}], indirect=True)
 async def test_location_details(
     hass: HomeAssistant,
     requests_mock: Mocker,
@@ -377,17 +375,11 @@ async def test_location_details(
     assert location_fields(data) == LOCATION_STATE
 
     # MS Graph only sends the places of an event when asked for them
-    calendar_view = next(
-        request
-        for request in requests_mock.request_history
-        if "calendarview" in request.url.lower()
-    )
+    calendar_view = next(request for request in requests_mock.request_history if "calendarview" in request.url.lower())
     assert "locations" in calendar_view.qs["$select"][0].split(",")
 
 
-@pytest.mark.parametrize(
-    "setup_base_integration", [{"method_name": "meeting_event_mocks"}], indirect=True
-)
+@pytest.mark.parametrize("setup_base_integration", [{"method_name": "meeting_event_mocks"}], indirect=True)
 async def test_meeting_links(
     hass: HomeAssistant,
     requests_mock: Mocker,
@@ -399,11 +391,7 @@ async def test_meeting_links(
     assert meeting_fields(data) == MEETING_STATE
 
     # MS Graph only sends the online meeting and web link when asked for them
-    calendar_view = next(
-        request
-        for request in requests_mock.request_history
-        if "calendarview" in request.url.lower()
-    )
+    calendar_view = next(request for request in requests_mock.request_history if "calendarview" in request.url.lower())
     assert {
         "isonlinemeeting",
         "onlinemeetingprovider",
