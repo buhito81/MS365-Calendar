@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest-homeassistant-custom-component>=0.13.373
+ical>=10.0.0
+BeautifulSoup4>=4.13.3
